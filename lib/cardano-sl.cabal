@@ -32,7 +32,6 @@ library
                         Pos.Diffusion.Full.Block
                         Pos.Diffusion.Full.Delegation
                         Pos.Diffusion.Full.Ssc
-                        Pos.Diffusion.Full.Types
                         Pos.Diffusion.Full.Txp
                         Pos.Diffusion.Full.Update
 
@@ -151,6 +150,7 @@ library
                       , conduit >= 1.2.8
                       , constraints
                       , containers
+                      , contravariant
                       , cryptonite >= 0.23 && <= 0.24
                       , data-default
                       , directory
@@ -170,6 +170,7 @@ library
                       , monad-control
                       , mtl
                       , neat-interpolation
+                      , network-transport
                       , optparse-applicative
                       , parsec
                       , plutus-prototype
