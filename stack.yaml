@@ -197,6 +197,10 @@ extra-deps:
 - gauge-0.2.1
 - statistics-0.14.0.2
 - validation-0.6.1
+- async-2.2.1                     # Has an important fix #58
+
+# Needed in order to build with async-2.2.1
+allow-newer: true
 
 # This is for CI to pass --fast to all dependencies
 apply-ghc-options: everything
