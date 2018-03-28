@@ -377,11 +377,21 @@ is used as the input of another within the same block.
 \end{split}
 \end{equation}
 
-This is the ``ah hah'' moment, that this bit can be made so simple. Note that
-this covers the case of one of our own transactions being committed, as well as
-transactions submitted by other instances of our wallet invalidating our
-pending transactions. Both are covered because all we are doing is removing
-pending transactions that have had any (or all!) of their inputs spent.
+One simple property of $\mathsf{updatePending}$ we will need later is that
+%
+\begin{lemma} \label{lemma:updatePending_is_filter}
+\begin{equation*}
+\mathsf{updatePending} ~ b ~ \mathit{pending} \subseteq \mathit{pending}
+\end{equation*}
+\end{lemma}
+%
+The definition of $\mathsf{updatePending}$ was an ``ah hah'' moment, that this
+bit can be made so simple. Note that this covers the case of one of our own
+transactions being committed, as well as transactions submitted by other
+instances of our wallet invalidating our pending transactions. Both are covered
+because all we are doing is removing pending transactions that have had any (or
+all!) of their inputs spent.
+
 
 \begin{equation}
 \begin{split}
@@ -934,17 +944,9 @@ We cannot roll back a wallet that contains only a single checkpoint
          : (\mathit{utxo}, \mathit{pending}) : \mathit{checkpoints}
          ) \\
 = ~ & (\mathit{utxo}, (\mathsf{updatePending} ~ b ~ \mathit{pending}) \cup \mathit{pending}) : \mathit{checkpoints} \\
-= ~ & (\mathit{utxo}, \mathit{pending}) : \mathit{checkpoints}
+= ~ & (\mathit{utxo}, \mathit{pending}) : \mathit{checkpoints} & \text{\{ Lemma~\ref{lemma:updatePending_is_filter} \}}
 \end{align*}
 \end{proof}
-
-The last line is justified by Lemma~\ref{lemma:updatePending_is_filter}.
-
-\begin{lemma} \label{lemma:updatePending_is_filter}
-\begin{equation*}
-\mathsf{updatePending} ~ b ~ \mathit{pending} \subseteq \mathit{pending}
-\end{equation*}
-\end{lemma}
 
 Moreover, we have
 
@@ -958,24 +960,21 @@ Moreover, we have
 
 \begin{proof}
 \begin{align*}
-    & \mathsf{rollback} ~ (\mathsf{newPending} ~ tx ~ (\mathsf{applyBlock} ~ b ~ ((\mathit{utxo}, \mathit{pending}) : \mathit{checkpoints}))) \\
-= ~ & \mathsf{rollback} ~ (\mathsf{newPending} ~ tx ~ (( \mathsf{updateUTxO} ~ b ~ \mathit{utxo}
-         , \mathsf{updatePending} ~ b ~ \mathit{pending}
+    & \mathsf{rollback} ~ (\mathsf{newPending} ~ tx ~ (\mathsf{applyBlock} ~ b ~ ((\mathit{u}, \mathit{p}) : \mathit{cs}))) \\
+= ~ & \mathsf{rollback} ~ (\mathsf{newPending} ~ tx ~ (( \mathsf{updateUTxO} ~ b ~ \mathit{u}
+         , \mathsf{updatePending} ~ b ~ \mathit{p}
          )
-         : (\mathit{utxo}, \mathit{pending}) : \mathit{checkpoints}
+         : (\mathit{u}, \mathit{p}) : \mathit{cs}
          )) \\
-= ~ & \mathsf{rollback} ~ (( \mathsf{updateUTxO} ~ b ~ \mathit{utxo}
-         , (\mathsf{updatePending} ~ b ~ \mathit{pending}) \cup \{tx\}
+= ~ & \mathsf{rollback} ~ (( \mathsf{updateUTxO} ~ b ~ \mathit{u}
+         , (\mathsf{updatePending} ~ b ~ \mathit{p}) \cup \{tx\}
          )
-         : (\mathit{utxo}, \mathit{pending}) : \mathit{checkpoints}
+         : (\mathit{u}, \mathit{p}) : \mathit{cs}
          ) \\
-= ~ & (\mathit{utxo}, ((\mathsf{updatePending} ~ b ~ \mathit{pending}) \cup \{tx\}) \cup \mathit{pending}) : \mathit{checkpoints} \\
-= ~ & (\mathit{utxo}, \mathit{pending} \cup \{tx\}) : \mathit{checkpoints}
+= ~ & (\mathit{u}, ((\mathsf{updatePending} ~ b ~ \mathit{p}) \cup \{tx\}) \cup \mathit{p}) : \mathit{cs} \\
+= ~ & (\mathit{u}, \mathit{p} \cup \{tx\}) : \mathit{cs} & \text{\{ Lemma~\ref{lemma:updatePending_is_filter} \}}
 \end{align*}
 \end{proof}
-
-where the last line follows from Lemma~\ref{lemma:updatePending_is_filter} and
-associativity and commutativity of set union.
 
 \subsection{Expected UTxO}
 \label{sec:expected_UTxO}
@@ -1281,7 +1280,26 @@ Clearly, we want to pick as many pending transactions as possible (since they
 reduce the balance), but pick expected transactions only when the decrease in
 balance from the dependent pending transactions makes up for the increase in
 balance from the expected transactions. Unfortunately this does seem to imply
-some kind of search. Consider this example with pending
+some kind of search. Consider this example with three pending transactions
+$t_1, t_2$ and $t_3$, and three expected transactions $t_4, t_5, t_6$:
+%
+\begin{center}
+\begin{forest}
+[,phantom
+  [$(t_1: -1)$] {\draw () to (t4);}
+  [$(t_2: -3)$ [$(t_4: +2)$, name=t4] [$(t_5: +1)$, name=t5]]
+  [$(t_3: -1)$ [$(t_6: +1)$]] {\draw () to (t5);}
+]
+\end{forest}
+\end{center}
+%
+Suppose we consider $t_4, t_5, t_6$ in order. We first consider if we
+should include $t_4$. Since $\Delta_{\{t_1, t_4\}} > 0$, 
+
+
+\hrule
+
+Consider this example with pending
 transctions $t_1, t_2, t_3$ and expected transactions $t_4, t_5$:
 %
 \begin{center}
