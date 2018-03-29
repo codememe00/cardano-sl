@@ -27,20 +27,13 @@ instance HasConfiguration => Arbitrary T.MsgGetBlocks where
     arbitrary = genericArbitrary
     shrink = genericShrink
 
-instance ( Arbitrary SscPayload
-         , Arbitrary SscProof
-         , Bi Raw
+instance ( Bi Raw
          , HasConfiguration
          ) =>
          Arbitrary T.MsgHeaders where
     arbitrary = genericArbitrary
     shrink = genericShrink
 
-instance ( Arbitrary SscPayload
-         , Arbitrary SscProof
-         , Arbitrary SscPayloadDependsOnSlot
-         , HasConfiguration
-         ) =>
-         Arbitrary T.MsgBlock where
+instance ( HasConfiguration ) => Arbitrary T.MsgBlock where
     arbitrary = genericArbitrary
     shrink = genericShrink

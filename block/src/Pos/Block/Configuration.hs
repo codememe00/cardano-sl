@@ -29,9 +29,8 @@ import           Universum
 
 import           Data.Aeson (FromJSON (..), ToJSON (..), genericParseJSON, genericToJSON)
 import           Data.Reflection (Given (..), give)
-import           Data.Time.Units (Microsecond, Second, convertUnit)
+import           Data.Time.Units (Microsecond, Second, convertUnit, fromMicroseconds)
 import           Serokell.Aeson.Options (defaultOptions)
-import           Serokell.Util (sec)
 
 import           Pos.Aeson.Core ()
 
@@ -88,7 +87,7 @@ instance FromJSON BlockConfiguration where
 -- | Estimated time needed to broadcast message from one node to all
 -- other nodes. Also see 'Pos.NodeConfiguration.ccNetworkDiameter'.
 networkDiameter :: HasBlockConfiguration => Microsecond
-networkDiameter = sec . ccNetworkDiameter $ blockConfiguration
+networkDiameter = fromMicroseconds . (*) 1000000 . fromIntegral . ccNetworkDiameter $ blockConfiguration
 
 ----------------------------------------------------------------------------
 -- Chain quality
