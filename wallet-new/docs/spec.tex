@@ -987,6 +987,12 @@ If we now roll back, we will have a pending transaction that depends on a
 transaction which has not yet been included in the blockchain. Let's call
 such a transaction ``expected''.
 
+\begin{definition}[Expected transaction]
+An expected transaction is a transaction that transfers funds \emph{to}
+the wallet, which we expect to be included in the blockchain in the future,
+but hasn't yet.
+\end{definition}
+
 The wallet may wish to keep track of such expected transactions (indeed, we
 might unify the concepts of pending and expected). Tracking expected
 transactions has some benefits. For instance, the wallet may in fact wish to
@@ -1026,7 +1032,35 @@ from the expected UTxO that were present in the block:
 \begin{equation*}
 \mathsf{updateExpected} ~ b ~ \mathit{expected} = \mathsf{txins} ~ b \subtractdom \mathit{expected}
 \end{equation*}
+
+The definition of $\mathsf{available}$ can remain pretty much unchanged.
 %
+\begin{definition}[Available balance]
+\begin{equation*}
+  \mathsf{available} ~ ((\mathit{utxo}, \mathit{pending}, \mathit{expected}) : \mathit{checkpoints})
+= \mathsf{txins} ~ \mathit{pending} \subtractdom \mathit{utxo} \\
+\end{equation*}
+\end{definition}
+%
+It makes no difference if  $\mathit{pending}$ contains
+inputs that don't exist in the UTxO (this is a direct consequence of
+Lemma~\ref{lem:subtractdom_dom}).
+
+In the presence of dependent transactions, however, the definition of
+$\mathsf{change}$ needs to be modified, since we should not include any
+transaction outputs that are consumed by other pending transactions:
+%
+\begin{equation*}
+  \mathsf{change} ~ ((\mathit{utxo}, \mathit{pending}, \mathit{expected}) : \mathit{checkpoints})
+= \mathsf{txins} ~ \mathit{pending} \subtractdom (\mathsf{txouts} ~ \mathit{pending} \restrictrange \mathsf{TxOut_{ours}})
+\end{equation*}
+
+The remainder of the definitions from Section~\ref{sec:wallet_operations} can
+remain unchanged, with the side condition to $\mathsf{newPending}$ continuing to
+ensure that we cannot introduce any \emph{new} dependent pending transactions.
+This is still useful for keeping the number of dependent transactions down.
+
+
 A trivial fact we need later is that
 %
 \begin{lemma} \label{lemma:updateExpected_is_filter}
@@ -1057,6 +1091,15 @@ This is the equivalent of Invariant~\ref{inv:utxo_is_ours}, and follows
 straight-forwardly from it because $\mathit{expected}$ is derived from
 $\mathit{utxo}$.
 
+Finally, we have to weaken Invariant~\ref{inv:txins_in_dom_utxo} to:
+
+\begin{invariant}
+\begin{equation*}
+\mathsf{txins} ~ pending \subseteq \dom utxo \cup \dom expected
+\end{equation*}
+\label{inv:txins_in_dom_utxo_expected}
+\end{invariant}
+
 In the following we will find it helpful to compute the UTxO of a block:
 %
 \begin{definition}[Block UTxO]
@@ -1085,8 +1128,12 @@ the block:
 \end{align*}
 \end{proof}
 
-When we roll back a block but remember the UTxO we used to have, we in a sense
-can anticipate what we think the future might look like.
+\todo[inline]{It may make sense to move this lemma up to where we define
+$\mathsf{updateUTxO}$, since I think it provides a nice intuition about what
+it does.}
+
+When we roll back a block but remember the UTxO we used to have, we
+can, in a sense, ``anticipate'' what we think the future might look like:
 
 \begin{definition}[Anticipate a block]
 \begin{equation*}
@@ -1136,7 +1183,8 @@ from the wallet to other accounts. In other words, we assume that expected
 transactions can only \emph{increase} the wallet's balance (and pending
 transactions can only \emph{decrease} it). If this assumption is not satisfied,
 the concept of minimum balance becomes meaningless, since there then always
-a possible future in which the ``other wallet'' spends all the wallet's funds.
+a possible future in which the ``other wallet'' spends all of the wallet's
+funds.
 \end{quote}
 
 \subsubsection{Compatibility of pending transactions}
@@ -1219,226 +1267,6 @@ transactions dependent on each other, as well as pending transactions depending
 on expected transactions and vice versa. Figure~\ref{fig:trans_deps} shows
 some of the possibilities, and computes in which possible future the wallet's
 balance is minimum.
-
-As discussed in Section~\ref{sec:compat_of_expected_trans}, however, we don't
-have accurate information about the dependencies of expected transactions. This
-means that when we compute the wallet's minimum balance, we need to be
-conservative.
-
-The goal then is to pick a set $S$ of pending and expected transactions that
-minimizes the wallet's balance, and is self-consistent in the sense that
-if $t_1 \in S$ and $t_1$ has a known dependency on $t_2$, then $t_2$ also in
-$S$. Note that the absence of some dependency information only gives us
-\emph{more} freedom in picking the elements of this set; thus, missing
-dependency information may make the lower bound that we establish less accurate,
-but it will still be a lower bound.
-
-One possibility is simply to assume that there are no dependencies at all. In
-this case the minimum balance is given by $S = \mathit{pending}$ (i.e., assuming
-that all of the pending transactions get committed and none of the  expected
-one). This is however overly conservative. For the pending transactions, we
-\emph{do} know when they depend on expected transactions; moreover, the expected
-UTxO tells us how much those expected transactions transfer to the wallet. We
-would like to establish a tighter bound.
-
-In order to establish a tighter lower bound it is also important not to ignore
-dependencies \emph{between} pending transactions, because they may imply
-transitive dependencies on expected transactions. Consider the following
-example with two pending transactions $t_1, t_3$ and two expected transactions
-$t_2, t_4$:
-%
-\begin{center}
-\begin{forest}
-[$(t_1 : -2)$
-  [$(t_2: +1)$]
-  [$(t_3: -1)$
-    [$(t_4: +3)$]
-  ]
-]
-\end{forest}
-\end{center}
-%
-If we ignore the fact that $t_1$ depends on $t_3$, then we would pick $S =
-\{t_1, t_2\}$ for a balance difference $\Delta_S$ of $-1$. In reality however
-the possible futures are
-
-\begin{tabular}{ll}
-$S$ & Difference in balance $\Delta_S$ \\ \hline
-$\emptyset$              & 0  \\
-$\{t_2\}$                & +1 \\
-$\{t_4\}$                & +3 \\
-$\{t_2, t_4\}$           & +4 \\
-$\{t_3, t_4\}$           & +2 \\
-$\{t_2, t_3, t_4\}$      & +3 \\
-$\{t_1, t_2, t_3, t_4\}$ & +1 \\
-\end{tabular}
-
-\noindent
-so that the minimum balance is actually given by $S = \emptyset$.
-
-Clearly, we want to pick as many pending transactions as possible (since they
-reduce the balance), but pick expected transactions only when the decrease in
-balance from the dependent pending transactions makes up for the increase in
-balance from the expected transactions. Unfortunately this does seem to imply
-some kind of search. Consider this example with three pending transactions
-$t_1, t_2$ and $t_3$, and three expected transactions $t_4, t_5, t_6$:
-%
-\begin{center}
-\begin{forest}
-[,phantom
-  [$(t_1: -1)$] {\draw () to (t4);}
-  [$(t_2: -3)$ [$(t_4: +2)$, name=t4] [$(t_5: +1)$, name=t5]]
-  [$(t_3: -1)$ [$(t_6: +1)$]] {\draw () to (t5);}
-]
-\end{forest}
-\end{center}
-%
-Suppose we consider $t_4, t_5, t_6$ in order. We first consider if we
-should include $t_4$. Since $\Delta_{\{t_1, t_4\}} > 0$, 
-
-
-\hrule
-
-Consider this example with pending
-transctions $t_1, t_2, t_3$ and expected transactions $t_4, t_5$:
-%
-\begin{center}
-\begin{forest}
-[,phantom
-  [$(t_1: -1)$] {\draw () to (y1);}
-  [$(t_2: -3)$
-    [$(t_4: +3)$,name=y1]
-    [$(t_5: +2)$,name=y2]
-  ]
-  [($t_3: -1)$] {\draw () to (y2);}
-]
-\end{forest}
-\end{center}
-%
-Suppose we first consider if we should include $t_4$. Since the effect
-$\Delta_S$ of $S = \{t_1, t_2, t_4\}$ is $-1$ (i.e., reduces the wallet's
-balance) we conclude that we should. We then consider what happens if we should
-also add $\{t_5, t_3\}$ to $S$, and conclude that we shouldn't, since this would
-give rise to a total $\Delta$ value of 0. However, the minimum delta is actually
-given by $\Delta_{\{t_2, t_3, t_5\}} = -2$.
-
-\subsubsection{Computing the minimum balance}
-
-\begin{definition}[Transactions in a UTxO]
-\begin{equation*}
-  \mathsf{txids} ~ \mathit{utxo}
-= \{ \mathit{txid} \mid (\mathit{txid}, \mathit{ix}) \mapsto (\mathit{addr}, c) \in \mathit{utxo} \ \}
-\end{equation*}
-\end{definition}
-
-\begin{definition}[Funds transferred to the wallet by expected transaction]
-\begin{equation*}
-  \mathsf{incoming}_\mathit{utxo} ~ \mathit{txid}
-= \sum_{(\mathit{txid}, \mathit{ix}) \mapsto (\mathit{addr}, c) \in \mathit{utxo}} c
-\end{equation*}
-\end{definition}
-
-\begin{definition}[Funds transferred from the wallet by pending transaction]
-\begin{equation*}
-  \mathsf{outgoing} ~ (\mathit{ins}, \mathit{outs})
-= \sum_{(\mathit{addr}, c) \in \mathit{outs}, \neg (\mathsf{ours} ~ \mathit{addr})} c
-\end{equation*}
-\end{definition}
-
-\begin{definition}[Consistency]
-A pair $(\mathcal{E}, \mathcal{P})$ of set $\mathcal{E}$ of expected transaction
-IDs and a set $\mathcal{P}$ of pending transactions is \emph{consistent} iff
-\begin{equation*}
-\forall (\mathit{ins}, \mathit{outs}) \in \mathcal{P} \cdot
-\forall (\mathit{txid}, \mathit{ix}) \in \mathit{ins} \cdot
-\mathit{txid} \in \mathcal{P} \vee \mathit{txid} \in \mathcal{E}
-\end{equation*}
-\end{definition}
-
-\begin{definition}[Difference in balance]
-\begin{equation*}
-  \Delta_\mathit{utxo}(\mathcal{E}, \mathcal{P})
-= \sum_{\mathit{txid} \in \mathcal{E}} \mathsf{incoming}_\mathit{utxo} ~ \mathit{txid}
-- \sum_{\mathit{tx} \in \mathcal{P}} \mathsf{outgoing} ~ \mathit{tx}
-\end{equation*}
-\end{definition}
-
-\begin{definition}[Future with the minimum balance]
-
-\begin{equation*}
-  \mathsf{minimize} ~ (\mathit{utxo}, \mathit{pending}, \mathit{expected})
-= \argmin_{\mathcal{E} \subseteq \mathsf{txids} ~ (\mathit{expected}) ,~
-           \mathcal{P} \subseteq \mathit{pending} ,~
-           \mathit{consistent} ~ (\mathcal{E}, \mathcal{P})
-          }
-  \Delta_\mathit{utxo} (\mathcal{E}, \mathcal{P})
-\end{equation*}
-\end{definition}
-
-\begin{lemma}
-For a given set $\mathcal{E}$, finding
-%
-\begin{equation*}
-S = \argmin_{\mathcal{P} \subseteq \mathit{pending} ,~
-           \mathit{consistent} ~ (\mathcal{E}, \mathcal{P})
-          }
-    \Delta_\mathit{utxo} (\mathcal{E}, \mathcal{P})
-\end{equation*}
-%
-can be done in $\order{|\mathit{pending}|}$ time.
-\end{lemma}
-
-\begin{proof}[Proof (sketch)]
-The set of pending transactions forms a DAG, which we can traverse in
-topological order (itself a well-known linear operation), keeping track of the
-transactions we selected so far. For each pending transaction we simply check if
-all its dependencies have been selected; if so, we include it. There is no need
-to backtrack on any of these decisions:
-
-\begin{itemize}
-\item Including a pending transaction is always a good thing (decreases the
-balance and can only increase the possibilities for  including further
-transactions)
-\item If we cannot include the transaction because some of its dependencies
-are missing, then any pending transactions we will encouter later in the
-topological order will not change this.
-\end{itemize}
-\end{proof}
-
-This would suggest that the complexity of $\mathsf{minimize}$ is
-exponential in $|\mathit{expected}|$ and linear in $|\mathit{pending}|$,
-but we can do a bit better.
-
-\begin{definition}[Grouping expected transactions]
-Given a set of expected transactions $\mathcal{E}$, let
-$\mathsf{group} ~ \mathcal{E}$ be the set of set of transactions such that
-two transactions are in the same group iff the set of pending transactions
-that (possibly transitively) depend on them overlap.
-\label{def:group_expected}
-\end{definition}
-
-\begin{lemma}
-The complexity of $\mathsf{minimize}$ is given by
-\begin{math}
-\order{e + 2^g + p}
-\end{math}
-with $e$ the number of groups of expected transactions
-(Definition~\ref{def:group_expected}), $g$ the size of the largest such group,
-and $p$ the number of pending transactions.
-\label{lem:complexity_minimize}
-\end{lemma}
-
-\begin{proof}[Proof (sketch)]
-Suffices to show that each group of expected transactions can be considered
-independently. However, this is not hard to see: there are no (known)
-dependencies between the expected transactions in different groups, nor are
-there dependencies between the pending transactions that depend on them (by
-definition), and hence decisions made in one group cannot effect decisions made
-in another.
-\end{proof}
-
-Note that if $g$ (Lemma~\ref{lem:complexity_minimize}) is very large, we can
-always fall back on a more conservative estimate.
 
 \begin{figure}[p]
 
@@ -1635,91 +1463,404 @@ c_4 + c_3 + c_2 + c_1 & \Y{t_1} \Y{t_2} \Y{t_3} \Y{t_4}
 \end{tabular}
 \end{figure}
 
-\clearpage
+As discussed in Section~\ref{sec:compat_of_expected_trans}, however, we don't
+have accurate information about the dependencies of expected transactions. This
+means that when we compute the wallet's minimum balance, we need to be
+conservative.
 
+The goal then is to pick a set $S$ of pending and expected transactions that
+minimizes the wallet's balance, and is self-consistent in the sense that
+if $t_1 \in S$ and $t_1$ has a known dependency on $t_2$, then $t_2$ also in
+$S$. Note that the absence of some dependency information only gives us
+\emph{more} freedom in picking the elements of this set; thus, missing
+dependency information may make the lower bound that we establish less accurate,
+but it will still be a lower bound.
 
+One possibility is simply to assume that there are no dependencies at all. In
+this case the minimum balance is given by $S = \mathit{pending}$ (i.e., assuming
+that all of the pending transactions get committed and none of the  expected
+one). This is however overly conservative. For the pending transactions, we
+\emph{do} know when they depend on expected transactions; moreover, the expected
+UTxO tells us how much those expected transactions transfer to the wallet. We
+would like to establish a tighter bound.
 
+In order to establish a tighter lower bound it is also important not to ignore
+dependencies \emph{between} pending transactions, because they may imply
+transitive dependencies on expected transactions. Consider the following
+example with two pending transactions $t_1, t_3$ and two expected transactions
+$t_2, t_4$:
+%
+\begin{center}
+\begin{forest}
+[$(t_1 : -2)$
+  [$(t_2: +1)$]
+  [$(t_3: -1)$
+    [$(t_4: +3)$]
+  ]
+]
+\end{forest}
+\end{center}
+%
+If we ignore the fact that $t_1$ depends on $t_3$, then we would pick $S =
+\{t_1, t_2\}$ for a balance difference $\Delta_S$ of $-1$. In reality however
+the possible futures are
 
+\begin{tabular}{ll}
+$S$ & Difference in balance $\Delta_S$ \\ \hline
+$\emptyset$              & 0  \\
+$\{t_2\}$                & +1 \\
+$\{t_4\}$                & +3 \\
+$\{t_2, t_4\}$           & +4 \\
+$\{t_3, t_4\}$           & +2 \\
+$\{t_2, t_3, t_4\}$      & +3 \\
+$\{t_1, t_2, t_3, t_4\}$ & +1 \\
+\end{tabular}
 
+\noindent
+so that the minimum balance is actually given by $S = \emptyset$.
 
-\subsection{Invariants}
+Clearly, we want to pick as many pending transactions as possible (since they
+reduce the balance), but pick expected transactions only when the decrease in
+balance from the dependent pending transactions makes up for the increase in
+balance from the expected transactions.
 
-The most important consequence of introducing rollbacks is that
-Invariant~\ref{inv:txins_in_dom_utxo}, which states that
+\subsubsection{Computing the minimum balance}
+\label{sec:computing_minimum_balance}
+
+\begin{definition}[Transactions in a UTxO]
+\begin{equation*}
+  \mathsf{txids} ~ \mathit{utxo}
+= \{ \mathit{txid} \mid (\mathit{txid}, \mathit{ix}) \mapsto (\mathit{addr}, c) \in \mathit{utxo} \ \}
+\end{equation*}
+\end{definition}
+
+\begin{definition}[Funds transferred to the wallet by expected transaction]
+\begin{equation*}
+  \mathsf{incoming}_\mathit{utxo} ~ \mathit{txid}
+= \sum_{(\mathit{txid}, \mathit{ix}) \mapsto (\mathit{addr}, c) \in \mathit{utxo}} c
+\end{equation*}
+\end{definition}
+
+\begin{definition}[Funds transferred from the wallet by pending transaction]
+\begin{equation*}
+  \mathsf{outgoing} ~ (\mathit{ins}, \mathit{outs})
+= \sum_{(\mathit{addr}, c) \in \mathit{outs}, \neg (\mathsf{ours} ~ \mathit{addr})} c
+\end{equation*}
+\end{definition}
+
+\begin{definition}[Consistency]
+A pair $(\mathcal{E}, \mathcal{P})$ of set $\mathcal{E}$ of expected transaction
+IDs and a set $\mathcal{P}$ of pending transactions is \emph{consistent} iff
+\begin{equation*}
+\forall (\mathit{ins}, \mathit{outs}) \in \mathcal{P} \cdot
+\forall (\mathit{txid}, \mathit{ix}) \in \mathit{ins} \cdot
+\mathit{txid} \in \mathcal{P} \vee \mathit{txid} \in \mathcal{E}
+\end{equation*}
+\end{definition}
+
+\begin{definition}[Difference in balance]
+\begin{equation*}
+  \Delta_\mathit{utxo}(\mathcal{E}, \mathcal{P})
+= \sum_{\mathit{txid} \in \mathcal{E}} \mathsf{incoming}_\mathit{utxo} ~ \mathit{txid}
+- \sum_{\mathit{tx} \in \mathcal{P}} \mathsf{outgoing} ~ \mathit{tx}
+\end{equation*}
+\end{definition}
+
+\begin{definition}[Future with minimum balance]
+
+\begin{equation*}
+  \mathsf{minimize} ~ (\mathit{utxo}, \mathit{pending}, \mathit{expected})
+= \argmin_{\mathcal{E} \subseteq \mathsf{txids} ~ (\mathit{expected}) ,~
+           \mathcal{P} \subseteq \mathit{pending} ,~
+           \mathit{consistent} ~ (\mathcal{E}, \mathcal{P})
+          }
+  \Delta_\mathit{utxo} (\mathcal{E}, \mathcal{P})
+\end{equation*}
+\end{definition}
+
+\begin{definition}[Minimum balance]
+\todo[inline]{TODO}
+\end{definition}
+
+\begin{lemma}
+For a given set $\mathcal{E}$, finding
 %
 \begin{equation*}
-\mathsf{txins} ~ pending \subseteq \dom utxo
+S = \argmin_{\mathcal{P} \subseteq \mathit{pending} ,~
+           \mathit{consistent} ~ (\mathcal{E}, \mathcal{P})
+          }
+    \Delta_\mathit{utxo} (\mathcal{E}, \mathcal{P})
 \end{equation*}
 %
-may now be violated. This needs careful consideration.
+can be done in $\order{|\mathit{pending}|}$ time.
+\end{lemma}
 
-First, we were using this invariant as an indirect way of stating that there
-can be no ``dependent'' transactions (Section~\ref{sec:invariants}). We can
-state this more directly as
-%
-\begin{equation} \label{no_dep_trans}
-\mathsf{txins} ~ \mathit{pending} \cap \dom (\mathsf{txouts} ~ \mathit{pending}) = \emptyset
-\end{equation}
-%
-Sadly, this property too may no longer hold after a rollback. This is expected;
-consider the following chain of events:
-%
-\begin{enumerate}
-\item The user submits transaction $t_1$, and $t_1$ gets confirmed.
-\item They then submit transaction $t_2$, which uses an output of transaction as $t_1$ as input.
-\item Finally, we roll back. We end up with both transactions $t_1$ and $t_2$ as pending, with $t_2$ dependent on $t_1$.
-\end{enumerate}
-
-If we wanted to avoid this, we would have to strenghten the side condition to
-$\mathsf{newPending}$:
+\begin{proof}[Proof (sketch)]
+The set of pending transactions forms a DAG, which we can traverse in
+topological order (itself a well-known linear operation), keeping track of the
+transactions we selected so far. For each pending transaction we simply check if
+all its dependencies have been selected; if so, we include it. There is no need
+to backtrack on any of these decisions:
 
 \begin{itemize}
-\item Confirmed transactions can only be used as inputs once we are absolutely
-certain that the blockchain will not roll back so far that they become pending
-again. (This is sufficient to guarantee \eqref{no_dep_trans}.)
-\item \emph{Incoming} transactions should also not be used until we are guaranteed
-that the chain will not rollback past where they were confirmed. (Necessary to
-additionally guarantee Invariant~\ref{inv:txins_in_dom_utxo}.)
+\item Including a pending transaction is always a good thing (decreases the
+balance and can only increase the possibilities for  including further
+transactions)
+\item If we cannot include the transaction because some of its dependencies
+are missing, then any pending transactions we will encouter later in the
+topological order will not change this.
 \end{itemize}
+\end{proof}
 
-In other words, both transactions submitted by the wallet itself and
-transactions from other wallets to this wallet can only be used after $k$ slots.
-With the security parameter $k$ set to 2160 and a slot length of 20 seconds,
-this currently takes exactly 12 hours. This is probably too restrictive.
+This would suggest that the complexity of $\mathsf{minimize}$ is
+exponential in $|\mathit{expected}|$ and linear in $|\mathit{pending}|$,
+but we can do a bit better.
 
-The remainder of the invariants of Section~\ref{sec:invariants} continue to hold.
+\begin{definition}[Grouping expected transactions]
+Given a set of expected transactions $\mathcal{E}$, let
+$\mathsf{group} ~ \mathcal{E}$ be the set of set of transactions such that
+two transactions are in the same group iff the set of pending transactions
+that (possibly transitively) depend on them overlap.
+\label{def:group_expected}
+\end{definition}
 
-\subsection{Available and change}
+\begin{lemma}
+The complexity of $\mathsf{minimize}$ is given by
+\begin{math}
+\order{e + 2^g + p}
+\end{math}
+with $e$ the number of groups of expected transactions
+(Definition~\ref{def:group_expected}), $g$ the size of the largest such group,
+and $p$ the number of pending transactions.
+\label{lem:complexity_minimize}
+\end{lemma}
 
-The definition of $\mathsf{available}$ can remain unchanged
+\begin{proof}[Proof (sketch)]
+Suffices to show that each group of expected transactions can be considered
+independently. However, this is not hard to see: there are no (known)
+dependencies between the expected transactions in different groups, nor are
+there dependencies between the pending transactions that depend on them (by
+definition), and hence decisions made in one group cannot effect decisions made
+in another.
+\end{proof}
+
+Note that if $g$ (Lemma~\ref{lem:complexity_minimize}) is very large, we can
+always fall back on a more conservative estimate.
+
+\subsubsection{Further efficiency improvements}
+
+In the last section we point out that we can group the expected transactions
+such that two expected transactions are in the same group if and only if
+their dependent pending transactions overlap. Then decisions in one group
+clearly cannot affect decisions in another, so that we reduce the complexity
+of finding the minimum balance from exponential in the number of expected
+transactions (which may be large) to exponential in the size of the largest
+group (which will be much smaller).
+
+In this section we make an observation that can reduce this complexity further:
+
+\begin{lemma}
+Whenever we discover a set of expected transactions $\mathcal{E}$ such that
+$\mathcal{E}$ together with the set of pending transactions $\mathcal{P}$ that
+depend \emph{only} on expected transactions in $\mathcal{E}$ (or on other
+pending transactions in $\mathcal{P}$), then this set $\mathcal{E}$ will be a
+subset of the set of expected transactions in the possible future with the
+minimum balance. In other words, it will not be necessary to backtrack on any of
+the decisions in $\mathcal{E}$.
+\end{lemma}
+
+\begin{proof}[Proof (sketch)]
+\def\circleEa{(0,0) circle (0.6cm)}
+\def\circleEb{(0.6cm,0cm) circle (0.6cm)}
+\def\circleEc{(0.3cm,-0.6cm) circle (0.6cm)}
+
+\colorlet{circle edge}{blue!50}
+\colorlet{circle area}{blue!20}
+
+\tikzset{filled/.style={fill=circle area, draw=circle edge, thick},
+    outline/.style={draw=circle edge, thick}}
+
+If $\mathcal{E}$ is a singleton set $\{e_1\}$, then it's obvious that whatever
+we discover later, including $e_1$ cannot increase the minimum balance we
+find.
+
+So, let's consider the smallest more interesting example: let's suppose
+we find a set $\{e_1, e_2\}$ of two expected transactions such that these
+two expected transactions, together with the pending transactions that
+depend \emph{only} on those two transactions, decrease our balance. Furthermore,
+let's assume that there is at least one other expected transactions that we
+may wish to include. Let's denote this visually as
 %
 \begin{equation}
-  \mathsf{available} ~ ((\mathit{utxo}, \mathit{pending}) : \mathit{checkpoints})
-= \mathsf{txins} ~ \mathit{pending} \subtractdom \mathit{utxo} \\
+(e_1 + e_2) -
+\begin{tikzpicture}[baseline=-0.4cm]
+    \begin{scope}
+    \draw[filled] \circleEa;
+    \draw[filled] \circleEb;
+    \fill[white] \circleEc;
+    \end{scope}
+    \draw[outline] \circleEa node {$e_1$};
+    \draw[outline] \circleEb node {$e_2$};
+    \draw[outline] \circleEc node {$e_3$};
+\end{tikzpicture}
+< 0
+\label{eq:e12sufficient}
 \end{equation}
 %
-It makes no difference if  $\mathit{pending}$ contains
-inputs that don't exist in the UTxO (this is a direct consequence of
-Lemma~\ref{lem:subtractdom_dom}).
+where the Venn diagram depicts all the pending transactions.
 
-In the presence of dependent transactions, however, the definition of
-$\mathsf{change}$ needs to be modified, since we should not include any
-transaction outputs that are consumed by other pending transactions:
+Let's also assume that including either $e_1$ or $e_2$ by themselves is
+\emph{not} sufficient to decrease the balance (otherwise we're back at the
+trivial case):
 %
-\begin{equation*}
-  \mathsf{change} ~ ((\mathit{utxo}, \mathit{pending}) : \mathit{checkpoints})
-= \mathsf{txins} ~ \mathit{pending} \subtractdom (\mathsf{txouts} ~ \mathit{pending} \restrictrange \mathsf{TxOut_{ours}})
-\end{equation*}
+\begin{equation}
+e_2 -
+\begin{tikzpicture}[baseline=-0.4cm]
+    \begin{scope}
+    \draw[filled] \circleEb;
+    \fill[white] \circleEa;
+    \fill[white] \circleEc;
+    \end{scope}
+    \draw[outline] \circleEa node {$e_1$};
+    \draw[outline] \circleEb node {$e_2$};
+    \draw[outline] \circleEc node {$e_3$};
+\end{tikzpicture}
+> 0
+\label{eq:e2insufficient}
+\end{equation}
 %
-(This change could be avoided if we strenghten the side condition to
-$\mathit{newPending}$, as discussed in the previous section.)
+Now the question becomes: might it be the case that we might have to backtrack
+on the decision to include $e_1$? If so, that would mean that picking
+$\{e_2, e_3\}$ (without $e_1$) must be a better choice than picking \emph{all}
+of $e_1, e_2, e_3$:
+%
+\begin{equation}
+(e_2 + e_3) -
+\begin{tikzpicture}[baseline=-0.4cm]
+    \begin{scope}
+    \draw[filled] \circleEb;
+    \draw[filled] \circleEc;
+    \fill[white] \circleEa;
+    \end{scope}
+    \draw[outline] \circleEa node {$e_1$};
+    \draw[outline] \circleEb node {$e_2$};
+    \draw[outline] \circleEc node {$e_3$};
+\end{tikzpicture}
+<
+(e_1 + e_2 + e_3) -
+\begin{tikzpicture}[baseline=-0.4cm]
+    \begin{scope}
+    \draw[filled] \circleEa;
+    \draw[filled] \circleEb;
+    \draw[filled] \circleEc;
+    \end{scope}
+    \draw[outline] \circleEa node {$e_1$};
+    \draw[outline] \circleEb node {$e_2$};
+    \draw[outline] \circleEc node {$e_3$};
+\end{tikzpicture}
+\label{eq:e23better}
+\end{equation}
+%
+From \eqref{eq:e12sufficient} we get
+%
+\begin{equation}
+e_2 -
+\begin{tikzpicture}[baseline=-0.4cm]
+    \begin{scope}
+    \draw[filled] \circleEb;
+    \fill[white] \circleEa;
+    \fill[white] \circleEc;
+    \end{scope}
+    \draw[outline] \circleEa node {$e_1$};
+    \draw[outline] \circleEb node {$e_2$};
+    \draw[outline] \circleEc node {$e_3$};
+\end{tikzpicture}
+< -e_1 +
+\begin{tikzpicture}[baseline=-0.4cm]
+    \begin{scope}
+    \draw[filled] \circleEa;
+    \fill[white] \circleEc;
+    \end{scope}
+    \draw[outline] \circleEa node {$e_1$};
+    \draw[outline] \circleEb node {$e_2$};
+    \draw[outline] \circleEc node {$e_3$};
+\end{tikzpicture}
+\end{equation}
+%
+Combining that with \eqref{eq:e2insufficient} we get
+%
+\begin{equation}
+0 < -e_1 +
+\begin{tikzpicture}[baseline=-0.4cm]
+    \begin{scope}
+    \draw[filled] \circleEa;
+    \fill[white] \circleEc;
+    \end{scope}
+    \draw[outline] \circleEa node {$e_1$};
+    \draw[outline] \circleEb node {$e_2$};
+    \draw[outline] \circleEc node {$e_3$};
+\end{tikzpicture}
+\qquad\text{i.e.}\qquad
+e_1 -
+\begin{tikzpicture}[baseline=-0.4cm]
+    \begin{scope}
+    \draw[filled] \circleEa;
+    \fill[white] \circleEc;
+    \end{scope}
+    \draw[outline] \circleEa node {$e_1$};
+    \draw[outline] \circleEb node {$e_2$};
+    \draw[outline] \circleEc node {$e_3$};
+\end{tikzpicture}
+< 0
+\label{eq:e1insufficient}
+\end{equation}
+%
+Finally, from \eqref{eq:e23better}
+%
+\begin{equation}
+0 <
+e_1 -
+\begin{tikzpicture}[baseline=-0.4cm]
+    \begin{scope}
+    \draw[filled] \circleEa;
+    \end{scope}
+    \draw[outline] \circleEa node {$e_1$};
+    \draw[outline] \circleEb node {$e_2$};
+    \draw[outline] \circleEc node {$e_3$};
+\end{tikzpicture}
+\end{equation}
+%
+but that contradicts \eqref{eq:e1insufficient}.
+\end{proof}
 
-The remainder of the definitions from Section~\ref{sec:wallet_operations} can
-remain unchanged, with the side condition to $\mathsf{newPending}$ continuing to
-ensure that we cannot introduce any \emph{new} dependent pending transactions.
-This is still useful for keeping the number of dependent transactions down.
+\subsection{Relation to the basic model}
 
-\subsection{Missing inputs}
+When there are no rollbacks, the set of expected transactions will be empty;
+this means for example that Invariant~\ref{inv:txins_in_dom_utxo_expected}
+collapes to Invariant~\ref{inv:txins_in_dom_utxo}.
+
+\todo[inline]{It would be nice to show a larger set of lemmas, showing how
+in the absence of rollbacks the extended model coincides with the basic model.}
+
+\begin{lemma}
+In the absence of rollback, the minimum balance equals the $\mathsf{total}$
+balance.
+\end{lemma}
+
+\begin{proof}[Proof (sketch)]
+From the definition of minimum balance in
+Section~\ref{sec:computing_minimum_balance}, we can see that the ``minimum
+balance'' arises from $\Delta_\mathit{utxo} (\emptyset, \mathit{pending})$
+(i.e., \emph{all} pending transactions, and there are no expected ones).
+But this corresponds precisely to removing all the inputs from the pending
+transactions and then adding back the change.
+\end{proof}
+
+\todo[inline]{The above proof is horribly wordy. I'd much prefer to have
+clean definitions but the minimum balance computation is a bit messy.}
+
+\subsection{Reporting balance}
+\label{sec:reporting}
 
 In the presence of rollbacks the interpretation of $\mathsf{change}$ (and
 consequently of $\mathsf{total}$) becomes a bit more subtle, and we should be
@@ -1741,54 +1882,13 @@ included into the blockchain, transaction $t_1$ must also have been; but this is
 somewhat tentative. Put another way, $\mathsf{change}$ may now anticipate
 transfers \emph{to} the user that have not yet happened.
 
-We can calculate the total $\mathsf{expected}$ value of these $\mathsf{missing}$
-inputs, but we have to do so in a slightly roundabout way. The missing inputs
-are given by
-%
-\begin{equation*}
-\mathsf{missing} ~ (\mathit{utxo}, \mathit{pending})
-= (\mathsf{txins} ~ \mathit{pending}) \setminus
-(\mathsf{txins} ~ \mathit{utxo} \cup \mathsf{txins} ~ (\mathsf{txouts} ~ \mathit{pending}))
-\end{equation*}
-%
-but we cannot use that to find their $\mathsf{expected}$ value: since these
-missing inputs refer to transactions (by hash) that we haven't received yet,
-we don't know what their corresponding outputs are. However, we \emph{do}
-know the total value of the inputs we \emph{do} have; so, we can take advantage
-of the property that transactions must be value preserving and define
-$\mathsf{expected}$ as
-%
-\begin{align*}
-  & ~ \mathsf{expected} ~ (\mathit{utxo}, \mathit{pending}) \\
-= & ~ \mathsf{balance} (\mathsf{txins} ~ \mathit{pending} \restrictdom \mathit{utxo}) \\
-- & ~ \mathsf{balance} (\mathsf{txins} ~ \mathit{pending} \restrictdom \mathsf{txouts} ~ \mathit{pending})
-\end{align*}
-%
-Alternatively, for a transaction in $\mathit{pending}$ to have a missing input,
-that particular input must have been in the UTxO of the wallet \emph{at some
-point}. So we should have the following invariant:
-
-\begin{invariant}[$\mathsf{expected}$ vs $\mathsf{missing}$]
-Given a wallet $((\mathit{utxo}, \mathit{pending}) : \mathit{checkpoints})$,
-we must have that
-\begin{equation*}
-  ~ \mathsf{expected} ~ (\mathit{utxo}, \mathit{pending})
-= \mathsf{missing} ~ (\mathit{utxo}, \mathit{pending}) \restrictdom \left( \mathit{utxo} \cup \bigcup_{(\mathit{utxo}', \textunderscore) \in \mathit{checkpoints}} \mathit{utxo}' \right)
-\end{equation*}
-\end{invariant}
-
-Note that this invariant is only true if the only source of dependent transactions
-is rollbacks; if we allow the user to introduce new dependent transactions,
-this invariant must be modified.
-
+\begin{quote} \emph{Note.}
 It is of course possible that such missing transactions (like $t_1$ in the
 example above) \emph{never} make it into the new fork, in which case the user's
 transaction ($t_2$) should eventually be removed from $\mathit{pending}$. This
 problem may arise even without rollbacks, however, and cannot be solved until we
 introduce a TTL value for transactions.
-
-\subsection{Reporting}
-\label{sec:reporting}
+\end{quote}
 
 The question of which balance the wallet reports to the user depends on how
 much uncertainly is acceptable in that number.
@@ -1930,27 +2030,6 @@ is not a particular interesting notion; if we stipulate ``assuming no
 incoming transactions'' then the maximum balance is simply the current balance,
 and if we don't make such a stipulation, then the balance of the wallet is
 unbounded (or bounded by the cryptocurrency's cap).
-
-\subsection{Basic Model}
-
-Given a wallet $(\mathit{utxo}, \mathit{pending})$, the wallet's minimum balance
-is given by
-
-\begin{align*}
-  & ~ \mathsf{minBalance} ~ (\mathit{utxo}, \mathit{pending}) \\
-= & ~ \mathsf{balance} ~ \mathit{utxo}
-    - \mathsf{balance} ~ (\mathsf{txins} ~ \mathit{pending} \restrictdom \mathit{utxo})
-    + \mathsf{balance} ~ (\mathsf{txouts} ~ \mathit{pending} \restrictrange \mathsf{TxOut}_\mathsf{ours}) \\
-= & ~ \mathsf{totalBalance} ~ (\mathit{utxo}, \mathit{pending})
-\end{align*}
-
-\begin{proof}[Proof (sketch)]
-Since the wallet's owner is not submitting any new transactions, transactions
-created by \emph{other} entities cannot transfer funds out of the wallet.
-Moreover, all of the pending transactions \emph{decrease} the
-wallet's balance, so the wallet's minimum balance will be reached when all
-of those pending transactions are included in the blockchain.
-\end{proof}
 
 \subsection{Dependent transactions}
 
