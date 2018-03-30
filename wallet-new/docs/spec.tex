@@ -26,7 +26,6 @@
 \newtheorem{lemma}{Lemma}
 \newtheorem{invariant}{Invariant}
 \newtheorem{definition}{Definition}
-\newtheorem{assumption}{Assumption}
 
 \floatstyle{boxed}
 \restylefloat{figure}
@@ -258,27 +257,41 @@ For convenience we will define a number of operations filter UTxOs:
 
 \begin{lemma}[Properties of UTxO operations]
 \begin{alignat}{4}
+  \mathit{ins} \restrictdom u
+& \subseteq u
+  \tag{1} \label{eq:utxo_props_restrictdom_subseteq}
+\\
+  u \restrictrange \mathit{outs}
+& \subseteq u
+  \tag{2} \label{eq:utxo_props_restrictrange_subseteq}
+\\
   \mathit{ins} \subtractdom u
-& = ( \dom u \setminus \mathit{ins} ) \restrictdom u
+& \subseteq u
+  \tag{3} \label{eq:utxo_props_subtractdom_subseteq}
 \\
   \mathit{ins} \restrictdom (u \cup v)
 & = (\mathit{ins} \restrictdom u) \cup (\mathit{ins} \restrictdom v)
-  \label{lem:utxo_props_restrictdom_union}
+  \tag{4} \label{eq:utxo_props_restrictdom_union}
 \\
   \mathit{ins} \subtractdom (u \cup v)
 & = (\mathit{ins} \subtractdom u) \cup (\mathit{ins} \subtractdom v)
+  \tag{5}
 \\
   (\mathit{ins} \cap \dom u) \restrictdom u
 & = \mathit{ins} \restrictdom u
-  \label{lem:utxo_props_restrictdom_dom}
+  \tag{6} \label{eq:utxo_props_restrictdom_dom}
 \\
   (\mathit{ins} \cap \dom u) \subtractdom u
 & = \mathit{ins} \subtractdom u
-  \label{lem:utxo_props_subtractdom_dom}
+  \tag{7} \label{eq:utxo_props_subtractdom_dom}
 \\
   (\mathit{ins} \cup \dom u) \subtractdom u \cup v
 & = (\mathit{ins} \cup \dom u) \subtractdom v
-\label{lem:utxo_props_subtractdom_remove_dom}
+  \tag{8} \label{eq:utxo_props_subtractdom_remove_dom}
+\\
+  \mathit{ins} \subtractdom u
+& = ( \dom u \setminus \mathit{ins} ) \restrictdom u
+  \tag{9}
 \end{alignat}
 \label{lem:utxo_props}
 \end{lemma}
@@ -286,7 +299,7 @@ For convenience we will define a number of operations filter UTxOs:
 We omit proofs for most of these properties, as they are straight-forward.
 Here is just one example:
 %
-\begin{proof}[Proof (Lemma~\ref{lem:utxo_props}.\ref{lem:utxo_props_restrictdom_union})]
+\begin{proof}[Proof (Lemma~\ref{lem:utxo_props}.\ref{eq:utxo_props_restrictdom_union})]
 \begin{align*}
   & ~ \mathit{ins} \restrictdom (u \cup v) \\
 = & ~ \{ i \mapsto o \mid i \mapsto o \in (u \cup v), i \in \mathit{ins} \} \\
@@ -297,14 +310,68 @@ Here is just one example:
 \end{align*}
 \end{proof}
 
+\subsection{Other auxiliary operations}
 
+We will make frequent use of the following operations throughout this
+specification.
+%
+\begin{align*}
+& \mathsf{txins} \in \powerset{\mathsf{Tx}} \to \powerset{\mathsf{TxIn}} \\
+& \mathsf{txins} ~ txs = \bigcup \{ inputs ~|~ (inputs, \_) \in txs \}
+\\[1em]
+& \mathsf{txouts} \in \powerset{\mathsf{Tx}} \to \mathsf{UTxO} \\
+& \mathsf{txouts} ~ txs =
+  \left\{ (\mathsf{txid} ~ tx, ix) \mapsto txout ~
+  \middle| \begin{array}{l@{~}c@{~}l}
+             tx & \in & txs \\
+             (\_, outputs) & = & tx \\
+             ix \mapsto txout & \in & outputs
+           \end{array}
+  \right\}
+\\[1em]
+& \mathsf{balance} \in \mathsf{UTxO} \to \mathsf{Coin} \\
+& \mathsf{balance} ~ utxo = \sum_{(\_ ~ \mapsto (\_, c)) \in utxo} c
+\end{align*}
+
+\begin{definition}[Dependence]
+We say that transaction $t_2$ \emph{depends on} transaction $t_1$ iff
+\begin{equation*}
+\exists \mathit{ix} \cdot (\mathsf{txid} ~ t_1, \mathit{ix}) \in \mathsf{txins} ~ t_2
+\end{equation*}
+\end{definition}
+
+\begin{definition}[Set of independent transactions]
+We will refer to a set of transactions $\mathit{txs}$ as a \emph{set of independent
+transactions} when there are no transactions that depend on other transactions
+in the set. Formally
+\begin{equation*}
+\mathsf{txins} ~ \mathit{txs} \cap \dom (\mathsf{txouts} ~ \mathit{txs}) = \emptyset
+\end{equation*}
+\end{definition}
+
+\begin{lemma}[Properties of $\mathsf{balance}$]
+There are a couple useful lemmas about $\mathsf{balance}$ distributing over
+other operators.
+%
+\begin{align}
+    \mathsf{balance} ~ (u \cup v)
+& = \mathsf{balance} ~ u + \mathsf{balance} ~ v
+& \text{if } \dom u \cap \dom v = \emptyset
+  \tag{1} \label{eq:balance_props_minus}
+\\
+  \mathsf{balance} ~ (\mathit{ins} \subtractdom u)
+& = \mathsf{balance} ~ u - \mathsf{balance} ~ (\mathit{ins} \restrictdom u)
+  \tag{2} \label{eq:balance_props_union}
+\end{align}
+%
+\label{lem:balance_props}
+\end{lemma}
 
 \section{The Basic Model}
 \label{sec:wallet_operations}
 
 \begin{figure}
 
-%
 \begin{equation*}
 \begin{split}
   \mathsf{totalBalance}
@@ -337,118 +404,146 @@ are only a small number of wallet operations of interest. We can:
 %
 We intentionally left the definition of $\mathsf{Wallet}$ abstract in this
 figure, as we will consider various different concrete instantiations throughout
-this specification. The most basic model is shown in
-Figure~\ref{fig:basic_model}.
+this specification.
 
 \begin{figure}
-todo
-\caption{\label{fig:basic_model}}
-\end{figure}
-
-Many arguments will be by induction on the structure of how a wallet can be
-built, i.e. combinations of $\mathsf{applyBlock}$ and $\mathsf{newPending}$.
-For a base case we need the empty wallet value.
-
-\begin{equation}
-\begin{split}
-w_\emptyset & \in \mathsf{Wallet} \\
-w_\emptyset & = (\emptyset, \emptyset)
-\end{split}
-\end{equation}
-
-It is worth mentioning that in the real implementation we have another
-operation, $\mathsf{undoBlock}$ which is in some sense the inverse of
-$\mathsf{applyBlock}$. We will revisit this operation later.
-
-%\begin{equation}
-%\begin{split}
-%\mathsf{undoBlock} \in \mathsf{Block} \to \mathsf{Wallet} \to \mathsf{Wallet} \\
-%\forall ~ w ~ b. ~ \mathsf{undoBlock} ~ b ~ (\mathsf{applyBlock} ~ b ~ w) = w
-%\end{split}
-%\end{equation}
-
-\subsection{Helpful operations}
-
-Before we define the main operations listed above, it is helpful to define some
-extra operations.
-
-\begin{equation}
-\begin{split}
-\mathsf{txins}& \in \powerset{\mathsf{Tx}} \to \powerset{\mathsf{TxIn}} \\
-\mathsf{txins}& ~ txs = \bigcup \{ inputs ~|~ (inputs, \_) \in txs \}
-\end{split}
-\end{equation}
-
-\begin{equation}
-\begin{split}
-\mathsf{txouts}&\in \powerset{\mathsf{Tx}} \to \mathsf{UTxO} \\
-\mathsf{txouts}& ~ txs =
-  \left\{ (\mathsf{txid} ~ tx, ix) \mapsto txout ~
-  \middle| \begin{array}{l@{~}c@{~}l}
-             tx & \in & txs \\
-             (\_, outputs) & = & tx \\
-             ix \mapsto txout & \in & outputs
-           \end{array}
-  \right\}
-\end{split}
-\end{equation}
-
-\begin{equation}
-\begin{split}
-\mathsf{available}, \mathsf{change}, \mathsf{total} & \in \mathsf{Wallet} \to \mathsf{UTxO} \\
-\mathsf{available} ~ (utxo, pending) & = \mathsf{txins} ~ pending \subtractdom utxo \\
-\mathsf{change} ~ (utxo, pending) & =
-    \mathsf{txouts} ~ pending \restrictrange \mathsf{TxOut_{ours}} \\
-\mathsf{total} ~ w & = \mathsf{available} ~ w \cup \mathsf{change} ~ w \\
-\end{split}
-\end{equation}
-
-\begin{equation}
-\begin{split}
-\mathsf{balance}& \in \mathsf{UTxO} \to \mathsf{Coin} \\
-\mathsf{balance}& ~ utxo = \sum_{(\_ ~ \mapsto (\_, c)) \in utxo} c
-\end{split}
-\end{equation}
-
-\subsection{Main operations}
-\label{sec:main_operations}
-
-\begin{equation}
+\emph{Wallet state}
+\begin{align*}
+& \mathsf{Wallet} = \mathsf{UTxO} \times \mathsf{Pending} \\
+& w_\emptyset \in \mathsf{Wallet} = (\emptyset, \emptyset)
+\end{align*}
+%
+\emph{Queries}
+%
+\begin{equation*}
 \begin{split}
 \mathsf{availableBalance} & = \mathsf{balance} \circ \mathsf{available} \\
 \mathsf{totalBalance}     & = \mathsf{balance} \circ \mathsf{total}
 \end{split}
-\end{equation}
-
-These two are nice and simple once we define the available and total UTxO. It
-is simply the available coins in those two UTxOs.
-
-\begin{equation} \label{applyBlock_spec}
-\begin{split}
-\mathsf{applyBlock} & ~ b ~ (utxo, pending) = \\
-                    & (\mathsf{updateUTxO} ~ b ~ utxo, ~~ \mathsf{updatePending} ~ b ~ pending)
-\end{split}
-\end{equation}
-
-\begin{equation}
-\begin{split}
+\end{equation*}
+%
+\emph{Updates}
+%
+\begin{align*}
+    \mathsf{applyBlock} ~ b ~ (utxo, pending)
+& = (\mathsf{updateUTxO} ~ b ~ utxo, ~ \mathsf{updatePending} ~ b ~ pending)
+\\
+  \mathsf{newPending} ~ tx ~ (utxo, pending)
+& = ( utxo, ~ pending \cup \{ tx \} )
+\end{align*}
+%
+\emph{Preconditions}
+%
+\begin{align*}
+& \mathsf{newPending} ~ (\mathit{ins}, \mathit{outs}) ~ (\mathit{utxo}, \mathit{pending}) \\
+& \qquad \text{valid when~} \mathit{ins} \subseteq \dom (\mathsf{available} ~ (utxo, pending))
+\\
+& \mathsf{applyBlock} ~ b ~ (\mathit{utxo}, \mathit{pending}) \\
+& \qquad \text{valid when~} \dom (\mathsf{txouts} ~ b) \cap \dom \mathit{utxo} = \emptyset
+\end{align*}
+%
+\emph{Auxiliary functions}
+%
+\begin{align*}
+\mathsf{available}, \mathsf{change}, \mathsf{total} & \in \mathsf{Wallet} \to \mathsf{UTxO} \\
+\mathsf{available} ~ (utxo, pending) & = \mathsf{txins} ~ pending \subtractdom utxo \\
+\mathsf{change} ~ (utxo, pending) & =
+    \mathsf{txouts} ~ pending \restrictrange \mathsf{TxOut_{ours}} \\
+\mathsf{total} ~ w & = \mathsf{available} ~ w \cup \mathsf{change} ~ w
+\end{align*}
+%
+\begin{align*}
 \mathsf{updateUTxO} & \in \mathsf{Block} \to \mathsf{UTxO} \to \mathsf{UTxO} \\
 \mathsf{updateUTxO} & ~ b ~ utxo = \mathsf{txins} ~ b \subtractdom (utxo \cup (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}}))
-\end{split}
-\end{equation}
-
-Note in this definition that we must remove spent inputs from the block after
-adding the extra outputs. It would be incorrect to use the definition $(\mathsf{txins} ~ b \subtractdom utxo)  \cup (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}})$.
-The difference of course crops up when one considers transactions within the
-block $b$ that depend on each other: that is where the output of one transaction
-is used as the input of another within the same block.
-
-\begin{equation}
-\begin{split}
+\end{align*}
+%
+\begin{align*}
 \mathsf{updatePending} & \in \mathsf{Block} \to \mathsf{Pending} \to \mathsf{Pending} \\
 \mathsf{updatePending} & ~ b ~ p = \{ tx ~|~ tx \in p, (inputs, \_) = tx, inputs \cap \mathsf{txins} ~ b = \emptyset \}
-\end{split}
-\end{equation}
+\end{align*}
+%
+\caption{\label{fig:basic_model}The Basic Model}
+\end{figure}
+
+The most basic model is shown in Figure~\ref{fig:basic_model}. In the remainder of
+this section comment on some its features.
+
+\subsection{Updating the UTxO}
+
+In order to update the UTxO, $\mathsf{updateUTxO}$ first adds the new outputs
+from the block, and then removes the inputs spent in the block. It would be
+incorrect to use the definition
+%
+\begin{equation*}
+(\mathsf{txins} ~ b \subtractdom utxo)  \cup (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}})
+\tag{incorrect}
+\end{equation*}
+%
+The difference crops up when one considers transactions within the block $b$
+that depend on each other: that is where the output of one transaction is used
+as the input of another within the same block. To make this intuition clearer,
+we can define a function that computes only the ``new'' outputs from a block
+(outputs that are not spent within that same block):
+%
+\begin{definition}[Block UTxO]
+\begin{equation*}
+\mathsf{new} ~ b = \mathsf{txins} ~ b \subtractdom (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}})
+\end{equation*}
+\end{definition}
+%
+We can then prove that $\mathsf{updateUtxo}$ adds precisely the new outputs
+of a block to the UTxO:
+%
+\begin{lemma} \label{lemma:update_remove_dom}
+\begin{math}
+\dom u \subtractdom \mathsf{updateUTxO} ~ b ~ u  = \mathsf{new} ~ b
+\end{math}
+\end{lemma}
+%
+\begin{proof}
+\begin{align*}
+  & ~ \dom u \subtractdom \mathsf{updateUTxO} ~ b ~ u \\
+= & ~ \dom u \subtractdom \Bigl( \mathsf{txins} ~ b \subtractdom (u \cup (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}})) \Bigr) \\
+= & ~ (\dom u \cup \mathsf{txins} ~ b) \subtractdom (u \cup (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}})) \\
+= & ~ (\dom u \cup \mathsf{txins} ~ b) \subtractdom (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}}) & \text{\{ Lemma~\ref{lem:utxo_props}.\ref{eq:utxo_props_subtractdom_remove_dom} \}} \\
+= & ~ \mathsf{txins} ~ b \subtractdom (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}}) = \mathsf{new} ~ b & \text{\{ Precondition to $\mathsf{applyBlock}$ \}}
+\end{align*}
+\end{proof}
+%
+This proofs relies on the precondition to $\mathsf{applyBlock}$, which simply
+says that new transactions in a new block should have transaction IDs that do
+not occur in the UTxO of the existing chain (or wallet); this should be a
+straightforward property of the blockchain.
+
+Note from the definitions of $\mathsf{applyBlock}$ and $\mathsf{newPending}$
+(and by induction from $w_\emptyset$) that the wallet UTxO depends only on the
+blocks and not the pending transactions.
+
+\subsection{Update the pending set}
+
+The definition of $\mathsf{updatePending}$ is pleasantly simple; the fact that
+it could be made so simple was an ``ah hah'' moment in the early development of
+this specification. Note that this covers the case of one of our own
+transactions being committed, as well as transactions submitted by other
+instances of our wallet invalidating our pending transactions. Both are covered
+because all we are doing is removing pending transactions that have had any (or
+indeed all) of their inputs spent.
+
+The precondition to $\mathsf{newPending}$ states that new pending transactions
+can only spent outputs in the wallet's current UTxO. Alternative, we could
+require that
+%
+\begin{equation*}
+\mathit{ins} \subseteq \dom (\mathsf{total}(utxo, pending))
+\end{equation*}
+%
+This would allow transactions that spend from change addresses, allowing
+multiple in-flight transactions that depend on each other. We disallow this
+for pragmatic reasons (long chains of pending transactions make it more
+difficult for nodes to resubmit transactions that for some reason did not
+get included in the blockchain). However, as we will see later, once
+we add support for rollback to the wallet we cannot assume anymore that
+there are no dependent pending transactions, even with this side condition.
 
 One simple property of $\mathsf{updatePending}$ we will need later is that
 %
@@ -457,74 +552,14 @@ One simple property of $\mathsf{updatePending}$ we will need later is that
 \mathsf{updatePending} ~ b ~ \mathit{pending} \subseteq \mathit{pending}
 \end{equation*}
 \end{lemma}
-%
-The definition of $\mathsf{updatePending}$ was an ``ah hah'' moment, that this
-bit can be made so simple. Note that this covers the case of one of our own
-transactions being committed, as well as transactions submitted by other
-instances of our wallet invalidating our pending transactions. Both are covered
-because all we are doing is removing pending transactions that have had any (or
-all!) of their inputs spent.
-
-
-\begin{equation}
-\begin{split}
-\mathsf{newPending} & ~ tx ~ (utxo, pending) = ( utxo, ~~ pending \cup \{ tx \} ) \\
-                    & \text{if } (inputs, \_) = tx \\
-                    & \quad inputs \subseteq \dom (\mathsf{available} ~ (utxo, pending))
-\end{split}
-\end{equation}
-
-Note the side condition on $\mathsf{newPending}$. If we changed this to
-$inputs \subseteq \dom (\mathsf{total}(utxo, pending))$ then we would allow transactions
-that spend from change addresses, allowing multiple in-flight transactions
-that depend on each other. It's not immediately obvious if this would be a
-purely local change or if there are other knock-on consequences.
-
-Note from the definitions of $\mathsf{applyBlock}$ and $\mathsf{newPending}$
-(and by induction from $w_\emptyset$) that the wallet UTxO depends only on the
-blocks and not the pending transactions.
-
-
-
-\section{Assumptions and properties}
-
-\subsection{Assumptions}
-
-For $\mathsf{applyBlock}$ we have an assumption, that should be a
-straightforward property of the blockchain. Much like the two properties above
-it simply says that new transactions in a new block should have transaction
-ids that do not occur in the utxo of the existing chain (or wallet).
-
-\begin{assumption}
-\begin{equation*}
-\begin{split}
-\mathsf{applyBlock} & ~ b ~ (utxo, pending) = \ldots \\
-& \text{if } \dom (\mathsf{txouts} ~ b) \cap \dom utxo = \emptyset \\
-\end{split}
-\end{equation*}
-\label{applyBlock_assumption}
-\end{assumption}
-
-
-\subsection{Lemmas}
-
-There are a couple useful lemmas about $\mathsf{balance}$ distributing over
-other operators.
-
-\begin{equation} \label{lemma_balance_minus}
-  \dom a \cap \dom b = \emptyset \quad \Longrightarrow \quad
-  \mathsf{balance} ~ (a \cup b) = \mathsf{balance} ~ a + \mathsf{balance} ~ b
-\end{equation}
-
-\begin{equation} \label{lemma_balance_union}
-  \mathsf{balance} ~ (a \subtractdom f) = \mathsf{balance} ~ f - \mathsf{balance} ~ (a \restrictdom f) \\
-\end{equation}
-
 
 \subsection{Invariants}
 \label{sec:invariants}
 
 We would hope to prove the following invariants are true for all wallet values.
+Proofs would proceed by induction on the wallet construction (empty wallet
+$w_\emptyset$, $\mathsf{applyBlock}$, $\mathsf{newPending}$). Not
+all of these invariants will be true in all models.
 
 \begin{invariant}
 \begin{equation*}
@@ -533,68 +568,84 @@ We would hope to prove the following invariants are true for all wallet values.
 \label{inv:txins_in_dom_utxo}
 \end{invariant}
 
-Note that this is only true if we do not allow dependent in-flight transactions.
-If we do allow dependent ones then the spent set of the pending includes change
-addresses that are not yet in the wallet UTxO.
+Note that Invariant~\ref{inv:txins_in_dom_utxo} only holds if we do not allow
+dependent in-flight transactions. If we do allow dependent ones then the spent
+set of the pending includes change addresses that are not yet in the wallet
+UTxO.
 
-Note that we may need to revisit this invariant in the light of rollbacks,
-because that reverts the UTxO but the set of pending transactions is not.
-
-\begin{invariant}
+\begin{invariant}[The wallet UTxO only covers addresses that belongs to the wallet]
+%
 \begin{equation*}
 \range utxo \subseteq \mathsf{TxOut_{ours}}
 \end{equation*}
 \label{inv:utxo_is_ours}
 \end{invariant}
 
-This just says that our wallet UTxO only covers addresses that belong to us,
-without covering anyone else's addresses.
-
-\begin{invariant}
+\begin{invariant}[Transactions removed from pending once included in UTxO]
 \begin{equation*}
 \dom (\mathsf{change} ~ w) \cap \dom (\mathsf{available} ~ w) = \emptyset
 \end{equation*}
 \label{inv:change_vs_available}
 \end{invariant}
 
-\begin{invariant}
+Given these invariants, we can prove a few simple lemmas.
+
+\begin{lemma}
+\begin{equation*}
+\dom(\mathsf{available} ~ (\mathit{utxo}, \mathit{pending}))
+\subseteq \dom(\mathit{utxo})
+\end{equation*}
+\label{lemma:dom_available}
+\end{lemma}
+
+\begin{proof}
+Follows immediately from
+Lemma~\ref{lem:utxo_props}.\ref{eq:utxo_props_subtractdom_subseteq}.
+\end{proof}
+
+\begin{lemma}[Change not in UTxO]
 \begin{equation*}
 \dom (\mathsf{change} ~ w) \cap \dom utxo = \emptyset
 \end{equation*}
-\label{inv:change_vs_utxo}
-\end{invariant}
+\label{lemma:change_vs_utxo}
+\end{lemma}
 
-This is not very deep. All new transactions should have fresh ids, and thus
-not be in the existing wallet UTxO. The first one reminds us that once
-transactions make it into the UTxO, they have been removed from the pending set.
+\begin{proof}
+Follows from Invariant~\ref{inv:change_vs_available}
+and Lemma~\ref{lemma:dom_available}.
+\end{proof}
 
-And some high level properties corresponding to our intuition, for a wallet $w$:
+Lemma~\ref{lemma:change_vs_utxo} is not very deep. All new transactions should
+have fresh IDs, and thus cannot be in the existing wallet UTxO.
 
-\begin{invariant}
-\begin{equation*}
-\mathsf{change} ~ w \cup \mathsf{available} ~ w = \mathsf{total} ~ w
-\end{equation*}
-\label{inv:change_union_available}
-\end{invariant}
+Finally we can state a lemma that relates $\mathsf{change}$, $\mathsf{available}$,
+and $\mathsf{total}$:
+%
+\begin{lemma}
+\begin{align}
+& \mathsf{change} ~ w \cup \mathsf{available} ~ w = \mathsf{total} ~ w
+  \tag{1} \label{eq:total_props_sets} \\
+& \mathsf{balance} ~ (\mathsf{change} ~ w) + \mathsf{balance} ~ (\mathsf{available} ~ w) = \mathsf{balance} ~ (\mathsf{total} ~ w)
+  \tag{2} \label{eq:total_props_balance}
+\end{align}
+\label{lemma:total_props}
+\end{lemma}
+%
+\begin{proof}
+(\ref{lemma:total_props}.\ref{eq:total_props_sets}) follows directly from
+the definition.
+(\ref{lemma:total_props}.\ref{eq:total_props_balance}) follows from
+(\ref{lemma:total_props}.\ref{eq:total_props_sets}) and
+Lemma~\ref{lem:balance_props}.\ref{eq:balance_props_union} with
+Invariant~\ref{inv:change_vs_available}.
+\end{proof}
 
-\begin{invariant}
-\begin{equation*}
-\mathsf{balance} ~ (\mathsf{change} ~ w) + \mathsf{balance} ~ (\mathsf{available} ~ w) = \mathsf{balance} ~ (\mathsf{total} ~ w)
-\end{equation*}
-\label{inv:balance_change_available}
-\end{invariant}
+\subsection{Complexity}
 
-Of course Invariant~\ref{inv:change_union_available} follows immediately from
-the definition; Invariant~\ref{inv:balance_change_available} follows from
-Invariant~\ref{inv:change_union_available} and Lemma~\ref{lemma_balance_union}
-with Invariant~\ref{inv:change_vs_available}.
-
-\section{Efficiency considerations}
-
-The description above is intended to be simple, not efficient. Let us take the
+The basic model is intended to be basic, not efficient. Let us take the
 initial description as a na\"ive implementation and consider the asymptotic
-complexity of the major operations. Then we can explore other approaches with
-better asymptotic complexity.
+complexity of the major operations. We will explore other approaches with
+better asymptotic complexity in later sections.
 
 Many of the basic operations we need to consider are set and map operations
 implemented using ordered balanced trees. Many of these operations have the
@@ -607,8 +658,13 @@ following complexity, where $M$ and $N$ are the sizes of the two sets or maps.
 \end{split}
 \end{equation*}
 
-The complexity of the major operations are then
+This $\mathsf{join}$ comes from \cite{join_bound}; observe that when $M = N$,
+$\order{\mathsf{join} ~ M ~ N}$ is is simply $\order{M}$, and when $N$ is much
+larger than $M$ (our typical case), $\order{\mathsf{join} ~ M ~ N}$ is bounded
+by $\order{M \cdot \log N}$. The complexity of the major operations are then as
+given in Figure~\ref{fig:basic_model_complexity}.
 
+\begin{figure}
 \begin{equation*}
 \begin{split}
 \mathsf{balance} ~ u & \in \order{|u|} \\
@@ -643,18 +699,36 @@ The complexity of the major operations are then
 \mathsf{updatePending} ~ b ~ p & \in \order{\mathsf{nlogn} ~ |\mathsf{txins}~ b| + \sum_{(inputs, \_) \in p}{\mathsf{join} ~ |inputs| ~ |\mathsf{txins}~ b|}}
 \end{split}
 \end{equation*}
+\caption{\label{fig:basic_model_complexity}Algorithmtic complexity of the operations in the basic model}
+\end{figure}
 
-It is worth knowing that the expected order of magnitudes of the sizes of the
-utxo and pending sets. The UTxO can be quite large, for example
-$|utxo| \leq 10^6$, while the pending set will typically be small, usually
-around $|pending| \leq 3$, while $|pending| = 100$ would be extreme. Similarly,
-the number of inputs and outputs in any individual transaction is not large.
+It is worth knowing that the expected
+order of magnitudes of the sizes of the utxo and pending sets. The UTxO can be
+quite large, for example $|utxo| \leq 10^6$, while the pending set will
+typically be small, usually around $|pending| \leq 3$, while $|pending| = 100$
+would be extreme. Similarly, the number of inputs and outputs in any individual
+transaction is not large.
 
 The asymptotic complexity of the na\"ive implementations are in fact mostly
 good enough. If we assume that the number of pending transactions, and the
 number of inputs and outputs for individual transactions is not large,
 then the only problematic operations are $\mathsf{availableBalance}$ and
 $\mathsf{totalBalance}$, which are both linear in $|u|$ (the size of the UTxO).
+
+\todo[inline]{Justify some of these bounds (see comments in the \TeX{} file).}
+
+% You give the bound `O(nlogn |txins txs|)` for `txins txs`. This is "clearly" correct in that we can first construct this set from a list, and constructing _any_ set from a list is `nlogn` in the size of that list (although a comment to this effect might help the reader). Having said that, I think we take advantage of the assumption stated below that "the number of inputs and outputs in any individual transaciton isn not large." If we assume that, for all intents and purposes, the number of % inputs and outputs of a transaction is bounded by some constant, then `O(|txins txs|) = O(|txs|)` and hence we can give the bound `O(nlogn |txs|)`, which is a bit simpler and looks less circular (the current definition gives the complexity in terms of the _output_ of `txins` rather than its input, which, though not incorrect, is a bit confusing
+% we can then do the exact same for `txouts`, giving the bound `O(nlogn txs)`
+%
+% The bound for `available` is stated as `O(join |txins p| |u|)`. This confused me. I think it'd be clearer to say it's `O(nlogn |txins p| + join |txins p| |u|)` (or possibly `O(nlogn |p| + join |txins p| |u|)`) (we do have to compute `txins p`after all), and then state the bound as given only as a simplificaiton. it's all the more confusing because in `change` this construction of `txouts` _is_ present (because there isn't a larger term to consume it)
+% The bound for `newPending` ignores the calculation of the side condition. may or may not be what we want.
+% Then in `totalBalance`, you do _not_ remove the term `nlogn |txouts p|` from the overall bound, unlike in `available` (and others). I don't know if this is an oversight or whether there is a subtle difference here that I'm missing?
+% I think it'd be better to include these terms everywhere, make it clear how these bounds are established, and then simplify as a separate step. (same in `updateUTxO`, for instance)
+% Finally, for `updatePending`, I think we can use the same simplifying assumption about the number of inputs of a transaction again to give a closed form for that bound, because then `join |inputs| |txins b|` becomes, essentially, `join 1 |txins b| = log(|txins b|)`, and hence we can remove the sum to get `O(|p| * log(|txins b|)`, or, better yet, `O(|p| * log(|b|)`, by applying tghe same assumption once more also to the number of inputs in a block
+%
+% (similar comments about establishing bounds apply also to the computations at the end of section 5.1, especially the second one)
+
+\section{Caching Balance}
 
 \subsection{Computing the balances}
 
@@ -674,7 +748,7 @@ t & = \mathsf{balance} ~ (\mathsf{available} ~ (utxo, pending) \cup \mathsf{chan
 \end{split}
 \end{equation*}
 
-We will use lemma \ref{lemma_balance_union}, about $\mathsf{balance}$
+We will use Lemma~\ref{lem:balance_props}.\ref{eq:balance_props_union}, about $\mathsf{balance}$
 distributing over $\cup$. The lemma's antecedent is satisfied by
 Invariant~\ref{inv:change_vs_available}. So this gives us
 \begin{equation*}
@@ -694,7 +768,7 @@ t & = a + \mathsf{balance} ~ (\mathsf{txouts} ~ pending \restrictrange \mathsf{T
 \end{split}
 \end{equation*}
 
-Next we apply lemma \ref{lemma_balance_minus} to distribute $\mathsf{balance}$
+Next we apply Lemma~\ref{lem:balance_props}.\ref{eq:balance_props_minus} to distribute $\mathsf{balance}$
 over $\subtractdom$, to get
 
 \begin{equation*}
@@ -770,7 +844,7 @@ And use it, giving us
 \end{split}
 \end{equation*}
 
-Applying lemma \ref{lemma_balance_minus} to distribute $\mathsf{balance}$ over $\subtractdom$ gives us
+Applying Lemma~\ref{lem:balance_props}.\ref{eq:balance_props_minus} to distribute $\mathsf{balance}$ over $\subtractdom$ gives us
 
 \begin{equation*}
 \begin{split}
@@ -784,7 +858,7 @@ Now it should be a property of the blockchain we can rely on that
 \dom utxo \cap \dom (\mathsf{txouts} ~ b) = \emptyset
 \end{equation*}
 
-So we can apply the other lemma (equation \ref{lemma_balance_union} to distribute $\mathsf{balance}$ over $\cup$) to give us
+So we can apply Lemma~\ref{lem:balance_props}.\ref{eq:balance_props_union} to distribute $\mathsf{balance}$ over $\cup$) to give us
 \begin{equation*}
 \begin{split}
     \sigma^\prime & = \mathsf{balance} ~ utxo + \mathsf{balance} ~ utxo^+ - \mathsf{balance} ~ (\mathsf{txins} ~ b \restrictdom (utxo \cup utxo^+)) \\
@@ -872,14 +946,14 @@ we still pass in \emph{all} inputs of the block. However, we also have that
 %
 This reduced set of inputs is sufficient for the definitions of
 $\mathit{utxo}^-$ and $\mathit{utxo}^\prime$, since by
-Lemma~\ref{lem:utxo_props}.\ref{lem:utxo_props_restrictdom_dom}
+Lemma~\ref{lem:utxo_props}.\ref{eq:utxo_props_restrictdom_dom}
 %
 \begin{equation*}
   \Bigl( \mathsf{txins} ~ b \cap \dom (\mathit{utxo} \cup \mathit{utxo}^+) \Bigr) \restrictdom (utxo \cup \mathit{utxo}^+) \\
 = \mathsf{txins} ~ b \restrictdom (utxo \cup \mathit{utxo}^+)
 \end{equation*}
 %
-and by Lemma~\ref{lem:utxo_props}.\ref{lem:utxo_props_subtractdom_dom}
+and by Lemma~\ref{lem:utxo_props}.\ref{eq:utxo_props_subtractdom_dom}
 %
 \begin{equation*}
   \Bigl( \mathsf{txins} ~ b \cap \dom (\mathit{utxo} \cup \mathit{utxo}^+) \Bigr) \subtractdom (utxo \cup \mathit{utxo}^+) \\
@@ -1117,7 +1191,7 @@ The definition of $\mathsf{available}$ can remain pretty much unchanged.
 %
 It makes no difference if  $\mathit{pending}$ contains
 inputs that don't exist in the UTxO (this is a direct consequence of
-Lemma~\ref{lem:utxo_props}.\ref{lem:utxo_props_subtractdom_dom}).
+Lemma~\ref{lem:utxo_props}.\ref{eq:utxo_props_subtractdom_dom}).
 
 In the presence of dependent transactions, however, the definition of
 $\mathsf{change}$ needs to be modified, since we should not include any
@@ -1173,38 +1247,9 @@ Finally, we have to weaken Invariant~\ref{inv:txins_in_dom_utxo} to:
 \label{inv:txins_in_dom_utxo_expected}
 \end{invariant}
 
-In the following we will find it helpful to compute the UTxO of a block:
-%
-\begin{definition}[Block UTxO]
-\begin{equation*}
-\mathsf{new} ~ b = \mathsf{txins} ~ b \subtractdom (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}})
-\end{equation*}
-\end{definition}
-%
-We should then have that if we update the wallet's UTxO with a block, and then
-remove the existing unspent outputs, this should precisely be the UTxO of
-the block:
-%
-\begin{lemma} \label{lemma:update_remove_dom}
-\begin{math}
-\dom u \subtractdom \mathsf{updateUTxO} ~ b ~ u  = \mathsf{new} ~ b
-\end{math}
-\end{lemma}
+(moved some stuff up here)
 
-\begin{proof}
-\begin{align*}
-  & ~ \dom u \subtractdom \mathsf{updateUTxO} ~ b ~ u \\
-= & ~ \dom u \subtractdom \Bigl( \mathsf{txins} ~ b \subtractdom (u \cup (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}})) \Bigr) \\
-= & ~ (\dom u \cup \mathsf{txins} ~ b) \subtractdom (u \cup (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}})) \\
-= & ~ (\dom u \cup \mathsf{txins} ~ b) \subtractdom (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}}) & \text{\{ Lemma~\ref{lem:utxo_props}.\ref{lem:utxo_props_subtractdom_remove_dom} \}} \\
-= & ~ \mathsf{txins} ~ b \subtractdom (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}}) = \mathsf{new} ~ b & \text{\{ Assumption~\ref{applyBlock_assumption} \}}
-\end{align*}
-\end{proof}
-
-\todo[inline]{It may make sense to move this lemma up to where we define
-$\mathsf{updateUTxO}$, since I think it provides a nice intuition about what
-it does.}
-
+%
 When we roll back a block but remember the UTxO we used to have, we
 can, in a sense, ``anticipate'' what we think the future might look like:
 
