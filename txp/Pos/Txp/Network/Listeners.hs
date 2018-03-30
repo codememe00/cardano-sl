@@ -25,7 +25,6 @@ import           Pos.Core.Txp (TxAux (..), TxId)
 import           Pos.Crypto (hash)
 import           Pos.Txp.MemState (MempoolExt, MonadTxpLocal, MonadTxpMem, txpProcessTx)
 import           Pos.Txp.Network.Types (TxMsgContents (..))
-import           Pos.Txp.Toil.Types (MemPool (..))
 import           Pos.Util.JsonLog.Events (JLTxR (..))
 
 {-txInvReqDataParams
