@@ -844,7 +844,7 @@ Putting everything back together, and defining $utxo^-$ for symmetry, gives
 us an extension of the basic model with a cached UTxO balance, shown
 in Figure~\ref{fig:model_with_cached_balance}.
 
-\begin{figure}
+\begin{figure}[p]
 %
 \emph{Wallet state}
 %
@@ -871,19 +871,21 @@ in Figure~\ref{fig:model_with_cached_balance}.
 \emph{Updates}
 %
 \begin{align*}
-\mathsf{applyBlock}_\sigma & ~ b ~ (utxo, pending, \sigma) = (utxo^\prime, pending^\prime, \sigma^\prime) \\
-\text{where} \quad \\
+& \mathsf{applyBlock}_\sigma ~ b ~ (utxo, pending, \sigma) = (utxo^\prime, pending^\prime, \sigma^\prime) \\
+& \qquad \text{where}
+  \begin{array}[t]{rl}
     pending^\prime & = \mathsf{updatePending} ~ b ~ pending \\
     utxo^+ & = \mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}} \\
     utxo^- & = \mathsf{txins} ~ b \restrictdom (utxo \cup utxo^+) \\
     utxo^\prime & = \mathsf{txins} ~ b \subtractdom (utxo \cup utxo^+) \\
     \sigma^\prime & = \sigma + \mathsf{balance} ~ utxo^+ - \mathsf{balance} ~ utxo^-
+  \end{array}
 \end{align*}
 %
 \caption{\label{fig:model_with_cached_balance}Basic model with cached balance}
 \end{figure}
 
-\section{Database implementation considerations}
+\section{Prefiltering}
 \label{sec:prefiltering}
 
 \subsection{Motivation}
@@ -896,24 +898,39 @@ length of 20 seconds would mean a worst-case log growth rate of 360 MB/hour.
 
 \subsection{Derivation}
 
-The goal therefore is to define an auxiliary function to $\mathsf{applyBlock}$
-which only needs the ``relevant'' information from the block.
-Since $\mathsf{applyBlock}_\sigma$ is only defined in terms of inputs and
-outputs of the block, we can easily define the following auxiliary function
-(where we have also expanded the definition of $\mathsf{updatePending}$).
+\begin{figure}[p]
 %
-\begin{equation*}
-\begin{split}
-\mathsf{applyBlock'}_\sigma & ~ (\mathit{txins}_b, \mathit{txouts}_b) ~ (\mathit{utxo}, \mathit{pending}, \sigma) = (\mathit{utxo}^\prime, \mathit{pending}^\prime, \sigma^\prime) \\
-\text{where} \quad \\
-    pending^\prime & = \{ tx ~|~ tx \in pending, (inputs, \_) = tx, inputs \cap \mathit{txins}_b = \emptyset \} \\
-    utxo^+ & = \mathit{txouts}_b \\
-    utxo^- & = \mathit{txins}_b \restrictdom (utxo \cup utxo^+) \\
-    utxo^\prime & = \mathsf{txins}_b \subtractdom (utxo \cup utxo^+) \\
-    \sigma^\prime & = \sigma + \mathsf{balance} ~ utxo^+ - \mathsf{balance} ~ utxo^- \\
-\end{split}
-\end{equation*}
+\emph{Wallet state} \\
+
+As in the basic model with cached balance (Figure~\ref{fig:model_with_cached_balance}).  \\
+
+\emph{Updates}
 %
+\begin{align*}
+& \mathsf{applyBlock}_\sigma ~ b
+  = \mathsf{applyBlock}'_\sigma ~ \Big( \mathsf{txins} ~ b \cap \dom (\mathit{utxo} \cup \mathit{utxo}^+), \mathit{utxo}^+ \Bigr) \\
+%
+& \mathsf{applyBlock'}_\sigma ~ (\mathit{txins}_b, \mathit{txouts}_b) ~ (\mathit{utxo}, \mathit{pending}, \sigma) = (\mathit{utxo}^\prime, \mathit{pending}^\prime, \sigma^\prime) \\
+& \qquad \text{where}
+   \begin{array}[t]{rl}
+     pending^\prime & = \{ tx ~|~ tx \in pending, (inputs, \_) = tx, inputs \cap \mathit{txins}_b = \emptyset \} \\
+     utxo^+ & = \mathit{txouts}_b \\
+     utxo^- & = \mathit{txins}_b \restrictdom (utxo \cup utxo^+) \\
+     utxo^\prime & = \mathsf{txins}_b \subtractdom (utxo \cup utxo^+) \\
+     \sigma^\prime & = \sigma + \mathsf{balance} ~ utxo^+ - \mathsf{balance} ~ utxo^-
+   \end{array}
+\end{align*}
+
+\caption{\label{fig:wallet_with_prefiltering}Wallet with prefiltering}
+\end{figure}
+
+The goal is to define an auxiliary function to $\mathsf{applyBlock}$ which only
+needs the ``relevant'' information from the block. Since
+$\mathsf{applyBlock}_\sigma$ is only defined in terms of the inputs and outputs
+of the block, we can easily define a variation $\mathsf{applyBlock}'_\sigma$,
+shown in Figure~\ref{fig:wallet_with_prefiltering}, that accepts these as two
+separate arguments.
+
 Letting
 %
 \begin{math}
@@ -922,19 +939,23 @@ Letting
 %
 we trivially we have that
 %
-\begin{equation}
+\begin{equation*}
   \mathsf{applyBlock}_\sigma ~ b
 = \mathsf{applyBlock}'_\sigma ~ (\mathsf{txins} ~ b, \mathit{utxo}^+)
-\end{equation}
+\end{equation*}
 %
 but we haven't gained much yet because although we only pass in ``our'' outputs,
 we still pass in \emph{all} inputs of the block. However, we also have that
-%
-\begin{equation}
+
+\begin{lemma}
+\begin{equation*}
   \mathsf{applyBlock}_\sigma ~ b
 = \mathsf{applyBlock}'_\sigma ~ \Big( \mathsf{txins} ~ b \cap \dom (\mathit{utxo} \cup \mathit{utxo}^+), \mathit{utxo}^+ \Bigr)
-\end{equation}
-%
+\end{equation*}
+\label{lem:prefiltering}
+\end{lemma}
+
+\begin{proof}
 This reduced set of inputs is sufficient for the definitions of
 $\mathit{utxo}^-$ and $\mathit{utxo}^\prime$, since by
 Lemma~\ref{lem:utxo_props}.\ref{eq:utxo_props_restrictdom_dom}
@@ -984,9 +1005,13 @@ it should suffice to look at the $\mathit{utxo}$ only. Indeed,
 Invariant~\ref{inv:txins_in_dom_utxo} tells us that this must be so. In the presence of
 rollbacks (Section~\ref{sec:rollback}) this is unfortunately no longer the case,
 but the reasoning above continues to be true.
+\end{proof}
 
-\todo[inline]{It would be nicer if the above could be made more formal; it's
+\todo[inline]{It would be nicer if this proof could be made more formal; it's
 tricky because it involves properties of the blockchain.}
+
+Lemma~\ref{lem:prefiltering} justifies the definition of the wallet with
+prefiltering (Figure~\ref{fig:wallet_with_prefiltering}).
 
 \subsection{Consequences}
 
@@ -1009,7 +1034,8 @@ the full UTxO of the blockchain. When the fullnode receives a new block,
 that block must be consistent with the state of the blockchain, and hence
 the fullnode can decorate all inputs with the corresponding addresses before
 passing the block to the wallet. This would make the filtering operation in
-the wallet trivial and stateless.
+the wallet trivial and stateless. (This is in fact the case for the current
+wallet implementation.)
 \item We can also push the problem further upstream and specify that the
 resolved addresses must be listed alongside the transaction IDs in the
 transaction inputs themselves. This would effectively be a form of caching
