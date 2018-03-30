@@ -42,6 +42,7 @@
 \maketitle
 
 \tableofcontents
+\listoffigures
 
 \section*{Status}
 
@@ -88,7 +89,9 @@ to give us some confidence that this is not just a collection of definitions
 and rules, but a collection that does correspond to what we believe a wallet is
 or does.
 
-\section{UTxO-style accounting}
+\section{Preliminaries}
+
+\subsection{UTxO-style Accounting}
 
 \begin{figure}
 
@@ -227,10 +230,103 @@ out to matter for any wallet operation, and the choice of set representation
 makes it possible to share useful operations between the set of pending
 transactions and the set of transactions in a block.
 
-\section{Wallet operations}
+\subsection{Operations on UTxO}
+
+For convenience we will define a number of operations filter UTxOs:
+%
+\begin{equation*}
+\begin{array}{rcllr}
+  \mathit{ins}
+& \restrictdom
+& \mathit{utxo}
+& = \{ i \mapsto o \mid i \mapsto o \in \mathit{utxo}, ~ i \in \mathit{ins} \}
+& \text{domain restriction}
+\\
+  \mathit{utxo}
+& \restrictrange
+& \mathit{outs}
+& = \{ i \mapsto o \mid i \mapsto o \in \mathit{utxo}, ~ o \in \mathit{outs} \}
+& \text{range restriction}
+\\
+  \mathit{ins}
+& \subtractdom
+& \mathit{utxo}
+& = \{ i \mapsto o \mid i \mapsto o \in \mathit{utxo}, ~ i \notin \mathit{ins} \}
+& \text{domain exclusion}
+\end{array}
+\end{equation*}
+
+\begin{lemma}[Properties of UTxO operations]
+\begin{alignat}{4}
+  \mathit{ins} \subtractdom u
+& = ( \dom u \setminus \mathit{ins} ) \restrictdom u
+\\
+  \mathit{ins} \restrictdom (u \cup v)
+& = (\mathit{ins} \restrictdom u) \cup (\mathit{ins} \restrictdom v)
+  \label{lem:utxo_props_restrictdom_union}
+\\
+  \mathit{ins} \subtractdom (u \cup v)
+& = (\mathit{ins} \subtractdom u) \cup (\mathit{ins} \subtractdom v)
+\\
+  (\mathit{ins} \cap \dom u) \restrictdom u
+& = \mathit{ins} \restrictdom u
+  \label{lem:utxo_props_restrictdom_dom}
+\\
+  (\mathit{ins} \cap \dom u) \subtractdom u
+& = \mathit{ins} \subtractdom u
+  \label{lem:utxo_props_subtractdom_dom}
+\\
+  (\mathit{ins} \cup \dom u) \subtractdom u \cup v
+& = (\mathit{ins} \cup \dom u) \subtractdom v
+\label{lem:utxo_props_subtractdom_remove_dom}
+\end{alignat}
+\label{lem:utxo_props}
+\end{lemma}
+%
+We omit proofs for most of these properties, as they are straight-forward.
+Here is just one example:
+%
+\begin{proof}[Proof (Lemma~\ref{lem:utxo_props}.\ref{lem:utxo_props_restrictdom_union})]
+\begin{align*}
+  & ~ \mathit{ins} \restrictdom (u \cup v) \\
+= & ~ \{ i \mapsto o \mid i \mapsto o \in (u \cup v), i \in \mathit{ins} \} \\
+= & ~ \{ i \mapsto o \mid (i \mapsto o \in u) \vee (i \mapsto o \in v), i \in \mathit{ins} \} \\
+= & ~ \{ i \mapsto o \mid (i \mapsto o \in u, i \in \mathit{ins}) \vee (i \mapsto o \in v, i \in \mathit{ins}) \} \\
+= & ~ \{ i \mapsto o \mid i \mapsto o \in u, i \in \mathit{ins} \} \cup \{ i \mapsto o \mid i \mapsto o \in v, i \in \mathit{ins} \} \\
+= & ~ (\mathit{ins} \restrictdom u) \cup (\mathit{ins} \restrictdom v)
+\end{align*}
+\end{proof}
+
+
+
+\section{The Basic Model}
 \label{sec:wallet_operations}
 
-There are only a small number of wallet operations of interest. We can:
+\begin{figure}
+
+%
+\begin{equation*}
+\begin{split}
+  \mathsf{totalBalance}
+& \in \mathsf{Wallet} \to \mathsf{Coin}
+\\
+  \mathsf{availableBalance}
+& \in \mathsf{Wallet} \to \mathsf{Coin}
+\\
+  \mathsf{applyBlock}
+& \in \mathsf{Block} \to \mathsf{Wallet} \to \mathsf{Wallet}
+\\
+  \mathsf{newPending}
+& \in \mathsf{Tx} \to \mathsf{Wallet} \to \mathsf{Wallet}
+\end{split}
+\end{equation*}
+
+\caption{\label{fig:wallet_interface}Wallet interface}
+\end{figure}
+
+The main wallet interface is shown in Figure~\ref{fig:wallet_interface}. There
+are only a small number of wallet operations of interest. We can:
+%
 \begin{itemize}
 \item enquire as to the balance of the wallet (total balance and
       available balance).
@@ -238,17 +334,16 @@ There are only a small number of wallet operations of interest. We can:
 \item make a new wallet state by adding a new pending transaction to a wallet
       state
 \end{itemize}
+%
+We intentionally left the definition of $\mathsf{Wallet}$ abstract in this
+figure, as we will consider various different concrete instantiations throughout
+this specification. The most basic model is shown in
+Figure~\ref{fig:basic_model}.
 
-\begin{equation}
-\begin{split}
-\mathsf{totalBalance}     & \in \mathsf{Wallet} \to \mathsf{Coin} \\
-\mathsf{availableBalance} & \in \mathsf{Wallet} \to \mathsf{Coin} \\
-\mathsf{applyBlock}       & \in \mathsf{Block} \to \mathsf{Wallet}
-                                             \to \mathsf{Wallet} \\
-\mathsf{newPending}       & \in \mathsf{Tx} \to \mathsf{Wallet}
-                                          \to \mathsf{Wallet}
-\end{split}
-\end{equation}
+\begin{figure}
+todo
+\caption{\label{fig:basic_model}}
+\end{figure}
 
 Many arguments will be by induction on the structure of how a wallet can be
 built, i.e. combinations of $\mathsf{applyBlock}$ and $\mathsf{newPending}$.
@@ -271,90 +366,6 @@ $\mathsf{applyBlock}$. We will revisit this operation later.
 %\forall ~ w ~ b. ~ \mathsf{undoBlock} ~ b ~ (\mathsf{applyBlock} ~ b ~ w) = w
 %\end{split}
 %\end{equation}
-
-\subsection{Notation}
-
-\subsubsection{Domain and Range Restriction}
-
-We make use of the somewhat-standard notation for domain and range restriction
-operators on functions (or more generally relations).
-
-\begin{equation*}
-\begin{split}
-a \restrictdom  f  & = \{ x \mapsto y ~|~ x \mapsto y \in f, ~ x \in a \} \\
-f \restrictrange a  & = \{ x \mapsto y ~|~ x \mapsto y \in f, ~ y \in a \}
-\end{split}
-\end{equation*}
-
-The more common notation for a function domain restriction $a \restrictdom f$
-is $f \restriction a$, but we use this notation for symmetry with the range
-restriction $f \restrictrange a$.
-
-\subsubsection{Domain Exclusion}
-
-It is convenient to use an operator $f \subtractdom s$, that restricts the
-domain of the function to \emph{exclude} elements of a given set. This is a
-normal function domain restriction but with the membership condition inverted.
-So we can use either of the following definitions.
-
-\begin{equation*}
-\begin{split}
-a \subtractdom f  & = ( \dom f \setminus a ) \restrictdom f \\
-a \subtractdom f  & = \{ x \mapsto y ~|~ x \mapsto y \in f, ~ x \notin a \}
-\end{split}
-\end{equation*}
-
-\subsubsection{Properties}
-
-\begin{lemma}[Domain restriction distributions over union]
-\begin{math}
-a \restrictdom (u \cup v) = (a \restrictdom u) \cup (a \restrictdom v)
-\end{math}
-\label{lem:restrictdom_union}
-\end{lemma}
-
-\begin{proof}
-\begin{equation*}
-\begin{split}
-& a \restrictdom (u \cup v) \\
-= & \{ x \mapsto y ~|~ x \mapsto y \in (u \cup v), x \in a \} \\
-= & \{ x \mapsto y ~|~ (x \mapsto y \in u) \vee (x \mapsto y \in v), x \in a \} \\
-= & \{ x \mapsto y ~|~ (x \mapsto y \in u, x \in a) \vee (x \mapsto y \in v, x \in a) \} \\
-= & \{ x \mapsto y ~|~ x \mapsto y \in u, x \in a \} \cup \{ x \mapsto y ~|~ x \mapsto y \in v, x \in a \} \\
-= & (a \restrictdom u) \cup (a \restrictdom v)
-\end{split}
-\end{equation*}
-\end{proof}
-
-\begin{lemma}[Domain exclusion distributions over union]
-\begin{math}
-a \subtractdom (u \cup v) = (a \subtractdom u) \cup (a \subtractdom v)
-\end{math}
-\label{lem:subtractdom_union}
-\end{lemma}
-
-\begin{lemma}[Domain restriction affects domain only]
-\begin{math}
-(a \cap \dom u) \restrictdom u = a \restrictdom u
-\end{math}
-\label{lem:restrictdom_dom}
-\end{lemma}
-
-\begin{lemma}[Domain exclusion affects domain only]
-\begin{math}
-(a \cap \dom u) \subtractdom u = a \subtractdom u
-\end{math}
-\label{lem:subtractdom_dom}
-\end{lemma}
-
-\begin{lemma}
-\begin{math}
-\text{If} \dom u \subseteq a \text{ then } a \subtractdom u \cup v = a \subtractdom v
-\end{math}
-\label{lem:subtractdom_remove_dom}
-\end{lemma}
-
-\todo[inline]{Use consistent variable naming.}
 
 \subsection{Helpful operations}
 
@@ -861,14 +872,14 @@ we still pass in \emph{all} inputs of the block. However, we also have that
 %
 This reduced set of inputs is sufficient for the definitions of
 $\mathit{utxo}^-$ and $\mathit{utxo}^\prime$, since by
-Lemma~\ref{lem:restrictdom_dom}
+Lemma~\ref{lem:utxo_props}.\ref{lem:utxo_props_restrictdom_dom}
 %
 \begin{equation*}
   \Bigl( \mathsf{txins} ~ b \cap \dom (\mathit{utxo} \cup \mathit{utxo}^+) \Bigr) \restrictdom (utxo \cup \mathit{utxo}^+) \\
 = \mathsf{txins} ~ b \restrictdom (utxo \cup \mathit{utxo}^+)
 \end{equation*}
 %
-and by Lemma~\ref{lem:subtractdom_dom}
+and by Lemma~\ref{lem:utxo_props}.\ref{lem:utxo_props_subtractdom_dom}
 %
 \begin{equation*}
   \Bigl( \mathsf{txins} ~ b \cap \dom (\mathit{utxo} \cup \mathit{utxo}^+) \Bigr) \subtractdom (utxo \cup \mathit{utxo}^+) \\
@@ -1106,7 +1117,7 @@ The definition of $\mathsf{available}$ can remain pretty much unchanged.
 %
 It makes no difference if  $\mathit{pending}$ contains
 inputs that don't exist in the UTxO (this is a direct consequence of
-Lemma~\ref{lem:subtractdom_dom}).
+Lemma~\ref{lem:utxo_props}.\ref{lem:utxo_props_subtractdom_dom}).
 
 In the presence of dependent transactions, however, the definition of
 $\mathsf{change}$ needs to be modified, since we should not include any
@@ -1185,7 +1196,7 @@ the block:
   & ~ \dom u \subtractdom \mathsf{updateUTxO} ~ b ~ u \\
 = & ~ \dom u \subtractdom \Bigl( \mathsf{txins} ~ b \subtractdom (u \cup (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}})) \Bigr) \\
 = & ~ (\dom u \cup \mathsf{txins} ~ b) \subtractdom (u \cup (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}})) \\
-= & ~ (\dom u \cup \mathsf{txins} ~ b) \subtractdom (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}}) & \text{\{ Lemma~\ref{lem:subtractdom_remove_dom} \}} \\
+= & ~ (\dom u \cup \mathsf{txins} ~ b) \subtractdom (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}}) & \text{\{ Lemma~\ref{lem:utxo_props}.\ref{lem:utxo_props_subtractdom_remove_dom} \}} \\
 = & ~ \mathsf{txins} ~ b \subtractdom (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}}) = \mathsf{new} ~ b & \text{\{ Assumption~\ref{applyBlock_assumption} \}}
 \end{align*}
 \end{proof}
