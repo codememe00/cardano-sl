@@ -451,7 +451,7 @@ this specification.
 & \mathsf{updatePending} ~ b ~ p = \{ tx ~|~ tx \in p, (inputs, \_) = tx, inputs \cap \mathsf{txins} ~ b = \emptyset \}
 \end{align*}
 %
-\caption{\label{fig:basic_model}The Basic Model}
+\caption{\label{fig:basic_model}The basic model}
 \end{figure}
 
 The most basic model is shown in Figure~\ref{fig:basic_model}. In the remainder of
@@ -1049,41 +1049,65 @@ into the block chain; indeed, may already have made it into the fork that we are
 transitioning to. In other words, rolling back may \emph{increase} the size of
 the pending set but never decrease it.
 
-\subsection{Specification}
+\subsection{Basic rollback model}
 \label{sec:rollback_spec}
 
-Let's go back to the basic model, and consider what the \emph{specification} of
-rollback should be.
+\begin{figure}
+%
+\emph{Wallet state}
 %
 \begin{align*}
-& w \in \mathsf{Wallet} = [\mathsf{Utxo} \times \mathsf{Pending}] \\
+& \mathit{checkpoints} \in \mathsf{Wallet} = [\mathsf{UTxO} \times \mathsf{Pending}] \\
+& w_\emptyset \in \mathsf{Wallet} = [(\emptyset, \emptyset)]
+\end{align*}
+%
+\emph{Updates}
+%
+\begin{align*}
 & \mathsf{applyBlock} ~ b ~ ((\mathit{utxo}, \mathit{pending}) : \mathit{checkpoints}) = \\
 & \qquad (( \mathsf{updateUTxO} ~ b ~ \mathit{utxo}
          , \mathsf{updatePending} ~ b ~ \mathit{pending}
          )
          : (\mathit{utxo}, \mathit{pending}) : \mathit{checkpoints}
          ) \\
-& \mathsf{newPending} ~ tx ~ ((\mathit{utxo}, \mathit{pending}) : \mathit{checkpoints}) = (\mathit{utxo}, pending \cup \{ tx \} ) : \mathit{checkpoints} \\
-& \mathsf{rollback} ~ ((\mathit{utxo}, \mathit{pending}) :  (\mathit{utxo}^\prime, \mathit{pending}^\prime) : \mathit{checkpoints})) =
-     (\mathit{utxo}^\prime, \mathit{pending} \cup \mathit{pending}^\prime) : \mathit{checkpoints}
+& \mathsf{newPending} ~ tx ~ ((\mathit{utxo}, \mathit{pending}) : \mathit{checkpoints}) = \\
+& \qquad (\mathit{utxo}, pending \cup \{ tx \} ) : \mathit{checkpoints} \\
+& \mathsf{rollback} ~ ((\mathit{utxo}, \mathit{pending}) :  (\mathit{utxo}^\prime, \mathit{pending}^\prime) : \mathit{checkpoints})) = \\
+& \qquad (\mathit{utxo}^\prime, \mathit{pending} \cup \mathit{pending}^\prime) : \mathit{checkpoints}
 \end{align*}
 %
-where the side condition to $\mathsf{newPending}$, as well as the definitions
-of $\mathsf{updateUTxO}$ and $\mathsf{updatePending}$, remain unchanged.
+\emph{Auxiliary}
+%
+\begin{align*}
+\mathsf{available} ~ (\mathit{utxo}, \mathit{pending})
+   & = \mathsf{txins} ~ \mathit{pending} \subtractdom \mathit{utxo} \tag{unchanged} \\
+\mathsf{change} ~ \mathit{pending}
+   & = \mathsf{txins} ~ \mathit{pending} \subtractdom (\mathsf{txouts} ~ \mathit{pending} \restrictrange \mathsf{TxOut_{ours}})
+\end{align*}
+%
+\caption{\label{fig:basic_rollback_model}Basic rollback model}
+\end{figure}
 
-The wallet state here is a list of \emph{checkpoints}, the value of the wallet
+The basic rollback is shown in Figure~\ref{fig:basic_rollback_model}. In this
+model the wallet state is a list of \emph{checkpoints}, the value of the wallet
 at various times throughout its lifetime; each call to $\mathsf{applyBlock}$
-introduces a new checkpoint. The initial wallet is the singleton list
-%
-\begin{equation}
-\begin{split}
-w_\emptyset & \in \mathsf{Wallet} \\
-w_\emptyset & = [(\emptyset, \emptyset)]
-\end{split}
-\end{equation}
-%
-We cannot roll back a wallet that contains only a single checkpoint
-(this would anyway not make semantic sense).
+introduces a new checkpoint. The initial wallet is the singleton list; We cannot
+roll back a wallet that contains only a single checkpoint (a rollback before any
+blocks have been applied would anyway not make semantic sense).
+
+After a rollback we have transactions in $\mathit{pending}$ that spend inputs
+that are not available in wallet's UTxO (we will explore this issue in detail in
+the next section). Nonetheless, the definition of $\mathsf{available}$ can
+remain pretty much unchanged, since that only considers inputs that \emph{are}
+in the UTxO anyway.
+
+However, rollbacks also mean that we have end up with pending transactions that
+depend on other pending transactions. This means that the definition of
+$\mathsf{change}$ must be modified to remove any outputs that are spent by other
+pending transactions. Note that the precondition to $\mathsf{newPending}$ still
+continues to ensure that we cannot introduce any \emph{new} dependent pending
+transactions. This is still useful for keeping the number of dependent
+transactions down.
 
 \begin{lemma} \label{lemma:rollback_applyBlock_id}
 \begin{equation*}
@@ -1168,10 +1192,22 @@ ones submitted by the wallet itself.
 
 Nonetheless, in order to be able to report a meaningful balance figure in
 the presence of rollbacks (more on that below), it \emph{is} useful to keep
-track of the ``expected UTxO''.
+track of the ``expected UTxO'': the unspent outputs that arise from
+expected transactions. The wallet model that does this is shown in
+Figure~\ref{fig:model_with_expected_UTxO}.
 
+\begin{figure}
+%
+\emph{Wallet state}
+%
 \begin{align*}
-& w \in \mathsf{Wallet} = [\mathsf{Utxo} \times \mathsf{Pending} \times \mathsf{Utxo}] \\
+& \mathit{checkpoints} \in [\mathsf{Utxo} \times \mathsf{Pending} \times \mathsf{Utxo}] \\
+& w_\emptyset \in \mathsf{Wallet} = [(\emptyset, \emptyset, \emptyset)]
+\end{align*}
+%
+\emph{Updates}
+%
+\begin{align*}
 & \mathsf{applyBlock} ~ b ~ ((\mathit{utxo}, \mathit{pending}, \mathit{expected}) : \mathit{checkpoints}) = \\
 & \qquad ~ (\mathsf{updateUTxO} ~ b ~ \mathit{utxo}, \mathsf{updatePending} ~ b ~ \mathit{pending}, \mathsf{updateExpected} ~ b ~ \mathit{expected}) \\
 & \qquad : (\mathit{utxo}, \mathit{pending}, \mathit{expected}) : \mathit{checkpoints} \\
@@ -1181,41 +1217,14 @@ track of the ``expected UTxO''.
 & \qquad (\mathit{utxo}', \mathit{pending} \cup \mathit{pending}', \mathit{expected} \cup \mathit{expected}' \cup (\dom \mathit{utxo}' \subtractdom \mathit{utxo})) : \mathit{checkpoints} \\
 \end{align*}
 %
-with the same side condition to $\mathsf{newPending}$ again. Similar to
-$\mathsf{updatePending}$, $\mathsf{updateExpected}$ simply removes any inputs
-from the expected UTxO that were present in the block:
+\emph{Auxiliary}
 %
 \begin{equation*}
 \mathsf{updateExpected} ~ b ~ \mathit{expected} = \mathsf{txins} ~ b \subtractdom \mathit{expected}
 \end{equation*}
-
-The definition of $\mathsf{available}$ can remain pretty much unchanged.
 %
-\begin{definition}[Available balance]
-\begin{equation*}
-  \mathsf{available} ~ ((\mathit{utxo}, \mathit{pending}, \mathit{expected}) : \mathit{checkpoints})
-= \mathsf{txins} ~ \mathit{pending} \subtractdom \mathit{utxo} \\
-\end{equation*}
-\end{definition}
-%
-It makes no difference if  $\mathit{pending}$ contains
-inputs that don't exist in the UTxO (this is a direct consequence of
-Lemma~\ref{lem:utxo_props}.\ref{eq:utxo_props_subtractdom_dom}).
-
-In the presence of dependent transactions, however, the definition of
-$\mathsf{change}$ needs to be modified, since we should not include any
-transaction outputs that are consumed by other pending transactions:
-%
-\begin{equation*}
-  \mathsf{change} ~ ((\mathit{utxo}, \mathit{pending}, \mathit{expected}) : \mathit{checkpoints})
-= \mathsf{txins} ~ \mathit{pending} \subtractdom (\mathsf{txouts} ~ \mathit{pending} \restrictrange \mathsf{TxOut_{ours}})
-\end{equation*}
-
-The remainder of the definitions from Section~\ref{sec:wallet_operations} can
-remain unchanged, with the side condition to $\mathsf{newPending}$ continuing to
-ensure that we cannot introduce any \emph{new} dependent pending transactions.
-This is still useful for keeping the number of dependent transactions down.
-
+\caption{\label{fig:model_with_expected_UTxO}Model with rollback and expected UTxO}
+\end{figure}
 
 A trivial fact we need later is that
 %
@@ -1251,12 +1260,11 @@ Finally, we have to weaken Invariant~\ref{inv:txins_in_dom_utxo} to:
 
 \begin{invariant}
 \begin{equation*}
-\mathsf{txins} ~ pending \subseteq \dom utxo \cup \dom expected
+\mathsf{txins} ~ pending \subseteq \dom (utxo \cup expected \cup \mathsf{txouts} ~ \mathit{pending})
 \end{equation*}
-\label{inv:txins_in_dom_utxo_expected}
+\label{inv:txins_in_dom_utxo_expected_pending}
 \end{invariant}
 
-(moved some stuff up here)
 
 %
 When we roll back a block but remember the UTxO we used to have, we
@@ -1295,7 +1303,7 @@ When the wallet submits new transactions, we expect all of those transactions
 to be eventually included in the blockchain, but there is no guarantee that this
 will happen: perhaps all will, perhaps only some will, perhaps none will. Let's
 refer to this as ``possible futures''. Then a reasonable question we might ask
-is: what is the wallet's \emph{minimum balance in all possible futures}?
+is: what is the wallet's \emph{minimum balance across all possible futures}?
 
 Since any transactions submitted by the wallet can only \emph{decrease} the
 wallet's balance, in the absence of rollbacks the minimum balance is given
@@ -1596,10 +1604,10 @@ means that when we compute the wallet's minimum balance, we need to be
 conservative.
 
 The goal then is to pick a set $S$ of pending and expected transactions that
-minimizes the wallet's balance, and is self-consistent in the sense that
-if $t_1 \in S$ and $t_1$ has a known dependency on $t_2$, then $t_2$ also in
-$S$. Note that the absence of some dependency information only gives us
-\emph{more} freedom in picking the elements of this set; thus, missing
+minimizes the wallet's balance, and is self-consistent in the sense that if $t_1
+\in S$ and $t_1$ has a known dependency on $t_2$, then $t_2$ also in $S$ (or in
+the wallet's UTxO). Note that the absence of some dependency information only
+gives us \emph{more} freedom in picking the elements of this set; thus, missing
 dependency information may make the lower bound that we establish less accurate,
 but it will still be a lower bound.
 
@@ -1962,9 +1970,11 @@ but that contradicts \eqref{eq:e1insufficient}.
 
 \subsection{Relation to the basic model}
 
-When there are no rollbacks, the set of expected transactions will be empty;
-this means for example that Invariant~\ref{inv:txins_in_dom_utxo_expected}
-collapes to Invariant~\ref{inv:txins_in_dom_utxo}.
+When there are no rollbacks, the set of expected transactions will be empty, and
+there can be no pending transactions that depend on other pending  transactions.
+This means for example that
+Invariant~\ref{inv:txins_in_dom_utxo_expected_pending} collapes to
+Invariant~\ref{inv:txins_in_dom_utxo}.
 
 \todo[inline]{It would be nice to show a larger set of lemmas, showing how
 in the absence of rollbacks the extended model coincides with the basic model.}
