@@ -35,7 +35,7 @@ import           Pos.Communication.Protocol (Conversation (..), ConversationActi
 import           Pos.Diffusion.Types (SubscriptionStatus (..))
 import           Pos.Network.Types (Bucket (..), NodeType)
 import           Pos.Worker.Types (Worker, WorkerSpec, worker)
-import           Pos.Util.DynamicTimer (DynamicTimer, startDynamicTimer, waitDynamicTimer)
+import           Pos.Util.Timer (Timer, startTimer, waitTimer)
 
 type SubscriptionMode m =
     ( MonadIO m
@@ -62,13 +62,14 @@ data SubscriptionTerminationReason =
 -- giving the reason. Notices will be logged before and after the subscription.
 subscribeTo
     :: forall m. (SubscriptionMode m)
-    => DynamicTimer m
+    => Timer
+    -> m Millisecond -- ^ Slot duration.
     -> TVar (Map NodeId SubscriptionStatus)
     -> MVar Millisecond -- ^ Subscription duration.
     -> SendActions m
     -> NodeId
     -> m SubscriptionTerminationReason
-subscribeTo keepAliveTimer subStatus subDuration sendActions peer =
+subscribeTo keepAliveTimer slotDuration subStatus subDuration sendActions peer =
     do
         -- Change subscription status as we begin a new subscription
         alterPeerSubStatus (Just Subscribing)
@@ -97,8 +98,9 @@ subscribeTo keepAliveTimer subStatus subDuration sendActions peer =
         alterPeerSubStatus (Just Subscribed)
         send conv MsgSubscribe
         forever $ do
-            startDynamicTimer keepAliveTimer
-            atomically $ waitDynamicTimer keepAliveTimer
+            time <- slotDuration
+            startTimer time keepAliveTimer
+            atomically $ waitTimer keepAliveTimer
             logDebug $ sformat ("subscriptionWorker: sending keep-alive to "%shown)
                                peer
             send conv MsgSubscribeKeepAlive

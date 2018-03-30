@@ -38,7 +38,7 @@ library
                        Pos.Util.Orphans
                        Pos.Util.Queue
                        Pos.Util.Some
-                       Pos.Util.DynamicTimer
+                       Pos.Util.Timer
                        Pos.Util.Util
 
   other-modules:
@@ -133,7 +133,7 @@ library
 test-suite cardano-sl-util
   main-is:            Test.hs
   other-modules:      Spec
-                      Test.Pos.Util.DynamicTimerSpec
+                      Test.Pos.Util.TimerSpec
   type:               exitcode-stdio-1.0
   build-depends:      async
                     , base 

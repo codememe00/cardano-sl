@@ -17,7 +17,7 @@ import           Control.Exception (Exception, throwIO)
 import           Control.Monad.Fix (MonadFix)
 import qualified Data.Map as M
 import qualified Data.Map.Strict as MS
-import           Data.Time.Units (Millisecond, Second, convertUnit)
+import           Data.Time.Units (Millisecond, Second)
 import           Formatting (Format)
 import           Mockable (withAsync, link)
 import qualified Network.Broadcast.OutboundQueue as OQ
@@ -69,7 +69,7 @@ import           Pos.Reporting.Ekg (EkgNodeMetrics (..), registerEkgNodeMetrics)
 import           Pos.Ssc.Message (MCOpening (..), MCShares (..), MCCommitment (..), MCVssCertificate (..))
 import           Pos.Util.Chrono (OldestFirst)
 import           Pos.Util.OutboundQueue (EnqueuedConversation (..))
-import           Pos.Util.DynamicTimer (DynamicTimer, newDynamicTimer)
+import           Pos.Util.Timer (Timer, newTimer)
 
 {-# ANN module ("HLint: ignore Reduce duplication" :: Text) #-}
 
@@ -111,7 +111,7 @@ diffusionLayerFull runIO networkConfig lastKnownBlockVersion transport mEkgNodeM
 
         let currentSlotDuration :: d Millisecond
             currentSlotDuration = bvdSlotDuration <$> getAdoptedBVData logic
-        keepaliveTimer :: DynamicTimer d <- newDynamicTimer (convertUnit <$> currentSlotDuration)
+        keepaliveTimer <- newTimer
 
         let -- VerInfo is a diffusion-layer-specific thing. It's only used for
             -- negotiating with peers.
@@ -217,7 +217,7 @@ diffusionLayerFull runIO networkConfig lastKnownBlockVersion transport mEkgNodeM
 
             mkL :: MkListeners d
             mkL = mconcat $
-                [ lmodifier "block"       $ Diffusion.Block.blockListeners logic oq keepaliveTimer
+                [ lmodifier "block"       $ Diffusion.Block.blockListeners logic oq keepaliveTimer currentSlotDuration
                 , lmodifier "tx"          $ Diffusion.Txp.txListeners logic oq enqueue
                 , lmodifier "update"      $ Diffusion.Update.updateListeners logic oq enqueue
                 , lmodifier "delegation"  $ Diffusion.Delegation.delegationListeners logic oq enqueue
@@ -344,7 +344,7 @@ runDiffusionLayerFull
     -> VerInfo
     -> Maybe (EkgNodeMetrics d)
     -> OQ.OutboundQ (EnqueuedConversation d) NodeId Bucket
-    -> DynamicTimer d -- ^ Keepalive timer.
+    -> Timer -- ^ Keepalive timer.
     -> d Millisecond -- ^ Slot duration; may change over time.
     -> TVar (MS.Map NodeId SubscriptionStatus) -- ^ Subscription status.
     -> (VerInfo -> [Listener d])

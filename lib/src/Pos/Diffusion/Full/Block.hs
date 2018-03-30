@@ -20,6 +20,7 @@ import           Data.List.NonEmpty (NonEmpty ((:|)))
 import qualified Data.List.NonEmpty as NE
 import qualified Data.Set as S
 import qualified Data.Text.Buildable as B
+import           Data.Time.Units (Millisecond)
 import           Formatting (bprint, build, int, sformat, shown, stext, (%))
 import qualified Network.Broadcast.OutboundQueue as OQ
 import           Serokell.Util.Text (listJson)
@@ -50,7 +51,7 @@ import           Pos.Security.Params (AttackTarget (..), AttackType (..), NodeAt
 import           Pos.Util (_neHead, _neLast)
 import           Pos.Util.Chrono (NE, NewestFirst (..), OldestFirst (..), nonEmptyNewestFirst,
                                   toOldestFirst, _NewestFirst, _OldestFirst)
-import           Pos.Util.DynamicTimer (DynamicTimer, startDynamicTimer)
+import           Pos.Util.Timer (Timer, startTimer)
 import           Pos.Util.TimeWarp (NetworkAddress, nodeIdToAddress)
 
 {-# ANN module ("HLint: ignore Reduce duplication" :: Text) #-}
@@ -409,15 +410,16 @@ blockListeners
        )
     => Logic m
     -> OQ.OutboundQ pack NodeId Bucket
-    -> DynamicTimer m -- ^ Keepalive timer
+    -> Timer -- ^ Keepalive timer
+    -> m Millisecond -- ^ Current slot duration
     -> MkListeners m
-blockListeners logic oq keepaliveTimer = constantListeners $
+blockListeners logic oq keepaliveTimer slotDuration = constantListeners $
     [ -- Peer wants some block headers from us.
       handleGetHeaders logic oq
       -- Peer wants some blocks from us.
     , handleGetBlocks logic oq
       -- Peer has a block header for us (yes, singular only).
-    , handleBlockHeaders logic oq keepaliveTimer
+    , handleBlockHeaders logic oq keepaliveTimer slotDuration
     ]
 
 ----------------------------------------------------------------------------
@@ -492,9 +494,10 @@ handleBlockHeaders
        )
     => Logic m
     -> OQ.OutboundQ pack NodeId Bucket
-    -> DynamicTimer m
+    -> Timer
+    -> m Millisecond
     -> (ListenerSpec m, OutSpecs)
-handleBlockHeaders logic oq keepaliveTimer =
+handleBlockHeaders logic oq keepaliveTimer slotDuration =
   listenerConv @MsgGetHeaders oq $ \__ourVerInfo nodeId conv -> do
     -- The type of the messages we send is set to 'MsgGetHeaders' for
     -- protocol compatibility reasons only. We could use 'Void' here because
@@ -504,7 +507,8 @@ handleBlockHeaders logic oq keepaliveTimer =
     whenJust mHeaders $ \case
         (MsgHeaders headers) -> do
             -- Reset the keepalive timer.
-            startDynamicTimer keepaliveTimer
+            time <- slotDuration
+            startTimer time keepaliveTimer
             handleUnsolicitedHeaders logic (getNewestFirst headers) nodeId
         _ -> pass -- Why would somebody propagate 'MsgNoHeaders'? We don't care.
 
