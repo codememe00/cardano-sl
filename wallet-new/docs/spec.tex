@@ -69,7 +69,7 @@
 \item[Draft 10, Mar 16, 2018 (Duncan)] First sketch of input selection
 \item[Draft 11, Mar 19, 2018 (Edsko)] Computation of minimum balance
 \item[Draft 12, Mar 30, 2018 (Edsko)] Significantly improved minimum balance computation,
-     and cleaned up the whole document. Also presented the new treatment of ``expected UTxo''
+     and cleaned up the whole document. Also presented the new treatment of ``expected UTxO''
      both in the weekly internal Well-Typed meeting and in the IOHK weekly Formal Spec meeting.
 \end{description}
 
@@ -233,27 +233,19 @@ transactions and the set of transactions in a block.
 
 For convenience we will define a number of operations filter UTxOs:
 %
-\begin{equation*}
-\begin{array}{rcllr}
-  \mathit{ins}
-& \restrictdom
-& \mathit{utxo}
+\begin{align*}
+  \mathit{ins} \restrictdom \mathit{utxo}
 & = \{ i \mapsto o \mid i \mapsto o \in \mathit{utxo}, ~ i \in \mathit{ins} \}
 & \text{domain restriction}
 \\
-  \mathit{utxo}
-& \restrictrange
-& \mathit{outs}
-& = \{ i \mapsto o \mid i \mapsto o \in \mathit{utxo}, ~ o \in \mathit{outs} \}
-& \text{range restriction}
-\\
-  \mathit{ins}
-& \subtractdom
-& \mathit{utxo}
+  \mathit{ins} \subtractdom \mathit{utxo}
 & = \{ i \mapsto o \mid i \mapsto o \in \mathit{utxo}, ~ i \notin \mathit{ins} \}
 & \text{domain exclusion}
-\end{array}
-\end{equation*}
+\\
+  \mathit{utxo} \restrictrange \mathit{outs}
+& = \{ i \mapsto o \mid i \mapsto o \in \mathit{utxo}, ~ o \in \mathit{outs} \}
+& \text{range restriction}
+\end{align*}
 
 \begin{lemma}[Properties of UTxO operations]
 \begin{alignat}{4}
@@ -261,13 +253,13 @@ For convenience we will define a number of operations filter UTxOs:
 & \subseteq u
   \tag{1} \label{eq:utxo_props_restrictdom_subseteq}
 \\
-  u \restrictrange \mathit{outs}
-& \subseteq u
-  \tag{2} \label{eq:utxo_props_restrictrange_subseteq}
-\\
   \mathit{ins} \subtractdom u
 & \subseteq u
-  \tag{3} \label{eq:utxo_props_subtractdom_subseteq}
+  \tag{2} \label{eq:utxo_props_subtractdom_subseteq}
+\\
+  u \restrictrange \mathit{outs}
+& \subseteq u
+  \tag{3} \label{eq:utxo_props_restrictrange_subseteq}
 \\
   \mathit{ins} \restrictdom (u \cup v)
 & = (\mathit{ins} \restrictdom u) \cup (\mathit{ins} \restrictdom v)
@@ -295,7 +287,7 @@ For convenience we will define a number of operations filter UTxOs:
 \end{alignat}
 \label{lem:utxo_props}
 \end{lemma}
-%
+
 We omit proofs for most of these properties, as they are straight-forward.
 Here is just one example:
 %
