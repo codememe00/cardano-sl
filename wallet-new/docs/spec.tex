@@ -409,7 +409,7 @@ this specification.
 \begin{figure}
 \emph{Wallet state}
 \begin{align*}
-& \mathsf{Wallet} = \mathsf{UTxO} \times \mathsf{Pending} \\
+& (\mathit{utxo}, \mathit{pending}) \in \mathsf{Wallet} = \mathsf{UTxO} \times \mathsf{Pending} \\
 & w_\emptyset \in \mathsf{Wallet} = (\emptyset, \emptyset)
 \end{align*}
 %
@@ -436,30 +436,27 @@ this specification.
 %
 \begin{align*}
 & \mathsf{newPending} ~ (\mathit{ins}, \mathit{outs}) ~ (\mathit{utxo}, \mathit{pending}) \\
-& \qquad \text{valid when~} \mathit{ins} \subseteq \dom (\mathsf{available} ~ (utxo, pending))
+& \qquad \text{requires~} \mathit{ins} \subseteq \dom (\mathsf{available} ~ (utxo, pending))
 \\
 & \mathsf{applyBlock} ~ b ~ (\mathit{utxo}, \mathit{pending}) \\
-& \qquad \text{valid when~} \dom (\mathsf{txouts} ~ b) \cap \dom \mathit{utxo} = \emptyset
+& \qquad \text{requires~} \dom (\mathsf{txouts} ~ b) \cap \dom \mathit{utxo} = \emptyset
 \end{align*}
 %
 \emph{Auxiliary functions}
 %
 \begin{align*}
-\mathsf{available}, \mathsf{change}, \mathsf{total} & \in \mathsf{Wallet} \to \mathsf{UTxO} \\
-\mathsf{available} ~ (utxo, pending) & = \mathsf{txins} ~ pending \subtractdom utxo \\
-\mathsf{change} ~ (utxo, pending) & =
-    \mathsf{txouts} ~ pending \restrictrange \mathsf{TxOut_{ours}} \\
-\mathsf{total} ~ w & = \mathsf{available} ~ w \cup \mathsf{change} ~ w
-\end{align*}
-%
-\begin{align*}
-\mathsf{updateUTxO} & \in \mathsf{Block} \to \mathsf{UTxO} \to \mathsf{UTxO} \\
-\mathsf{updateUTxO} & ~ b ~ utxo = \mathsf{txins} ~ b \subtractdom (utxo \cup (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}}))
-\end{align*}
-%
-\begin{align*}
-\mathsf{updatePending} & \in \mathsf{Block} \to \mathsf{Pending} \to \mathsf{Pending} \\
-\mathsf{updatePending} & ~ b ~ p = \{ tx ~|~ tx \in p, (inputs, \_) = tx, inputs \cap \mathsf{txins} ~ b = \emptyset \}
+& \mathsf{available}, \mathsf{total} \in \mathsf{Wallet} \to \mathsf{UTxO} \\
+& \mathsf{available} ~ (utxo, pending) = \mathsf{txins} ~ pending \subtractdom utxo \\
+& \mathsf{total} ~ (utxo, pending) = \mathsf{available} ~ ~ (utxo, pending) \cup \mathsf{change} ~ pending \\
+\\
+& \mathsf{change} \in \mathsf{Pending} \to \mathsf{UTxO} \\
+& \mathsf{change} ~ pending = \mathsf{txouts} ~ pending \restrictrange \mathsf{TxOut_{ours}} \\
+\\
+& \mathsf{updateUTxO} \in \mathsf{Block} \to \mathsf{UTxO} \to \mathsf{UTxO} \\
+& \mathsf{updateUTxO} ~ b ~ utxo = \mathsf{txins} ~ b \subtractdom (utxo \cup (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}})) \\
+\\
+& \mathsf{updatePending} \in \mathsf{Block} \to \mathsf{Pending} \to \mathsf{Pending} \\
+& \mathsf{updatePending} ~ b ~ p = \{ tx ~|~ tx \in p, (inputs, \_) = tx, inputs \cap \mathsf{txins} ~ b = \emptyset \}
 \end{align*}
 %
 \caption{\label{fig:basic_model}The Basic Model}
@@ -530,7 +527,7 @@ because all we are doing is removing pending transactions that have had any (or
 indeed all) of their inputs spent.
 
 The precondition to $\mathsf{newPending}$ states that new pending transactions
-can only spent outputs in the wallet's current UTxO. Alternative, we could
+can only spent outputs in the wallet's current UTxO. Alternatively, we could
 require that
 %
 \begin{equation*}
@@ -583,7 +580,7 @@ UTxO.
 
 \begin{invariant}[Transactions removed from pending once included in UTxO]
 \begin{equation*}
-\dom (\mathsf{change} ~ w) \cap \dom (\mathsf{available} ~ w) = \emptyset
+\dom (\mathsf{change} ~ \mathit{pending}) \cap \dom (\mathsf{available} ~ (\mathit{utxo}, \mathit{pending})) = \emptyset
 \end{equation*}
 \label{inv:change_vs_available}
 \end{invariant}
@@ -605,7 +602,7 @@ Lemma~\ref{lem:utxo_props}.\ref{eq:utxo_props_subtractdom_subseteq}.
 
 \begin{lemma}[Change not in UTxO]
 \begin{equation*}
-\dom (\mathsf{change} ~ w) \cap \dom utxo = \emptyset
+\dom (\mathsf{change} ~ \mathit{pending}) \cap \dom(utxo) = \emptyset
 \end{equation*}
 \label{lemma:change_vs_utxo}
 \end{lemma}
@@ -622,10 +619,11 @@ Finally we can state a lemma that relates $\mathsf{change}$, $\mathsf{available}
 and $\mathsf{total}$:
 %
 \begin{lemma}
+Given a wallet $w = (\mathit{utxo}, \mathit{pending})$,
 \begin{align}
-& \mathsf{change} ~ w \cup \mathsf{available} ~ w = \mathsf{total} ~ w
+& \mathsf{change} ~ \mathit{pending} \cup \mathsf{available} ~ w = \mathsf{total} ~ w
   \tag{1} \label{eq:total_props_sets} \\
-& \mathsf{balance} ~ (\mathsf{change} ~ w) + \mathsf{balance} ~ (\mathsf{available} ~ w) = \mathsf{balance} ~ (\mathsf{total} ~ w)
+& \mathsf{balance} ~ (\mathsf{change} ~ \mathit{pending}) + \mathsf{balance} ~ (\mathsf{available} ~ w) = \mathsf{balance} ~ (\mathsf{total} ~ w)
   \tag{2} \label{eq:total_props_balance}
 \end{align}
 \label{lemma:total_props}
@@ -641,6 +639,7 @@ Invariant~\ref{inv:change_vs_available}.
 \end{proof}
 
 \subsection{Complexity}
+\label{sec:basic_model_complexity}
 
 The basic model is intended to be basic, not efficient. Let us take the
 initial description as a na\"ive implementation and consider the asymptotic
@@ -671,7 +670,7 @@ given in Figure~\ref{fig:basic_model_complexity}.
 \mathsf{txins}   ~ txs  & \in \order{\mathsf{nlogn} ~ |\mathsf{txins}~ txs|} \\
 \mathsf{txouts}  ~ txs  & \in \order{\mathsf{nlogn} ~ |\mathsf{txouts}~ txs|)} \\
 \mathsf{available} ~ (u,p) & \in \order{\mathsf{join} ~ |\mathsf{txins}~ p| ~ |u|} \\
-\mathsf{change}    ~ (u,p) & \in \order{\mathsf{nlogn} ~ |\mathsf{txouts}~ p| } \\
+\mathsf{change}    ~ p     & \in \order{\mathsf{nlogn} ~ |\mathsf{txouts}~ p| } \\
 \mathsf{total}     ~ (u,p) & \in \order{
                               \begin{split}
                                 & ~ \mathsf{join} ~ |\mathsf{txins}~ p| ~ |u| \\
@@ -709,12 +708,6 @@ typically be small, usually around $|pending| \leq 3$, while $|pending| = 100$
 would be extreme. Similarly, the number of inputs and outputs in any individual
 transaction is not large.
 
-The asymptotic complexity of the na\"ive implementations are in fact mostly
-good enough. If we assume that the number of pending transactions, and the
-number of inputs and outputs for individual transactions is not large,
-then the only problematic operations are $\mathsf{availableBalance}$ and
-$\mathsf{totalBalance}$, which are both linear in $|u|$ (the size of the UTxO).
-
 \todo[inline]{Justify some of these bounds (see comments in the \TeX{} file).}
 
 % You give the bound `O(nlogn |txins txs|)` for `txins txs`. This is "clearly" correct in that we can first construct this set from a list, and constructing _any_ set from a list is `nlogn` in the size of that list (although a comment to this effect might help the reader). Having said that, I think we take advantage of the assumption stated below that "the number of inputs and outputs in any individual transaciton isn not large." If we assume that, for all intents and purposes, the number of % inputs and outputs of a transaction is bounded by some constant, then `O(|txins txs|) = O(|txs|)` and hence we can give the bound `O(nlogn |txs|)`, which is a bit simpler and looks less circular (the current definition gives the complexity in terms of the _output_ of `txins` rather than its input, which, though not incorrect, is a bit confusing
@@ -730,64 +723,61 @@ $\mathsf{totalBalance}$, which are both linear in $|u|$ (the size of the UTxO).
 
 \section{Caching Balance}
 
-\subsection{Computing the balances}
+The asymptotic complexity of the na\"ive implementations
+(Section~\ref{sec:basic_model_complexity}) are in fact mostly good enough. If we
+assume that the number of pending transactions, and the number of inputs and
+outputs for individual transactions is not large, then the only problematic
+operations are $\mathsf{availableBalance}$ and $\mathsf{totalBalance}$, which
+are both linear in $|u|$ (the size of the UTxO).
+
+In this section we derive a variation on the basic model which caches the
+balance for the UTxO to address this problem.
+
+\todo[inline]{Don't we want to a cache a per-address balance?}
+
+\subsection{Factoring out the UTxO balance}
 
 Suppose we have a wallet state $(utxo, pending)$, with
-
-\begin{equation*}
-\begin{split}
+%
+\begin{align*}
 a & = \mathsf{availableBalance} ~ (utxo, pending) \\
 t & = \mathsf{totalBalance} ~ (utxo, pending)
-\end{split}
-\end{equation*}
-Expanding definitions we have
-\begin{equation*}
-\begin{split}
+%
+\intertext{Expanding definitions we have}
+%
 a & = \mathsf{balance} ~ (\mathsf{available} ~ (utxo, pending)) \\
-t & = \mathsf{balance} ~ (\mathsf{available} ~ (utxo, pending) \cup \mathsf{change} ~ (utxo, pending))
-\end{split}
-\end{equation*}
-
-We will use Lemma~\ref{lem:balance_props}.\ref{eq:balance_props_union}, about $\mathsf{balance}$
-distributing over $\cup$. The lemma's antecedent is satisfied by
-Invariant~\ref{inv:change_vs_available}. So this gives us
-\begin{equation*}
-\begin{split}
+t & = \mathsf{balance} ~ (\mathsf{available} ~ (utxo, pending) \cup \mathsf{change} ~ pending)
+%
+\intertext{Use Lemma~\ref{lem:balance_props}.\ref{eq:balance_props_union} to
+distribute $\mathsf{balance}$ over $\cup$. The lemma's antecedent is satisfied
+by Invariant~\ref{inv:change_vs_available}.}
+%
 a & = \mathsf{balance} ~ (\mathsf{available} ~ (utxo, pending)) \\
 t & = \mathsf{balance} ~ (\mathsf{available} ~ (utxo, pending)) \\
-  & + \mathsf{balance} ~ (\mathsf{change} ~ (utxo, pending))
-\end{split}
-\end{equation*}
-
-Expanding definitions and simplifying we get
-
-\begin{equation*}
-\begin{split}
+  & + \mathsf{balance} ~ (\mathsf{change} ~ pending)
+%
+\intertext{Expanding definitions and simplifying we get}
+%
 a & = \mathsf{balance} ~ (\mathsf{txins} ~ pending \subtractdom utxo) \\
-t & = a + \mathsf{balance} ~ (\mathsf{txouts} ~ pending \restrictrange \mathsf{TxOut_{ours}})
-\end{split}
-\end{equation*}
-
-Next we apply Lemma~\ref{lem:balance_props}.\ref{eq:balance_props_minus} to distribute $\mathsf{balance}$
-over $\subtractdom$, to get
-
-\begin{equation*}
-\begin{split}
-a & = \mathsf{balance} ~ utxo - \mathsf{balance} ~ (\mathsf{txins} ~ pending \restrictdom utxo) \\
-t & = a + \mathsf{balance} ~ (\mathsf{txouts} ~ pending \restrictrange \mathsf{TxOut_{ours}})
-\end{split}
-\end{equation*}
+t & = a + \mathsf{balance} ~ (\mathsf{change} ~ pending)
+%
+\intertext{Finally, we apply
+Lemma~\ref{lem:balance_props}.\ref{eq:balance_props_minus} to distribute
+$\mathsf{balance}$ over $\subtractdom$, to get}
+%
+a & = \mathsf{balance} ~ utxo - \mathsf{balance} ~ (\mathsf{txins} ~ pending \restrictdom utxo)
+\end{align*}
 
 Note the complexity of these operations
-
+%
 \begin{equation*}
 \begin{split}
 \mathsf{balance} ~ utxo & \in \order{|utxo|} \\
 \mathsf{balance} ~ (\mathsf{txins} ~ pending \restrictdom utxo) & \in \order{\mathsf{join} ~ |\mathsf{txins}~ pending| ~ |utxo|} \\
-\mathsf{balance} ~ (\mathsf{txouts} ~ pending \restrictrange \mathsf{TxOut_{ours}}) & \in \order{\mathsf{nlogn} ~ |\mathsf{txouts}~ pending|}
+\mathsf{balance} ~ (\mathsf{change} ~ pending) & \in \order{\mathsf{nlogn} ~ |\mathsf{txouts}~ pending|}
 \end{split}
 \end{equation*}
-
+%
 Only the first is expensive. This suggests that we should at least cache the
 balance of the UTxO. If we only cache the UTxO then the available and total
 balances are not too expensive to compute.
@@ -795,80 +785,52 @@ balances are not too expensive to compute.
 Of course we could cache more, but each extra value we cache adds complexity to
 the design, and additional proof obligations.
 
-\subsection{Incrementally maintaining the UTxO balance}
+\subsection{Keeping cached balance up to date}
 \label{sec:applyBlock_incr}
 
-Let us define a new state $w_\sigma = (utxo, pending, \sigma)$ that contains the UTxO
-balance directly. The invariant is of course that $\sigma = \mathsf{balance} ~ utxo$.
-Now we must define new function variants $\mathsf{applyBlock}_\sigma$. This is
-the only operation that needs non-trivial changes.
+Now that we've factored out the common $\mathsf{balance} ~ \mathit{utxo}$
+term, let's cache this as a new field $\sigma$ in the wallet state. Since
+$\mathsf{applyBlock}$ is the function that modifies the UTxO, we will
+need to modify it to additionally update the cached UTxO balance.
 
-For $\mathsf{applyBlock}_\sigma$ we start with a state
-$w_\sigma = (utxo, pending, \sigma)$
-and we may assume the invariant $\sigma = \mathsf{balance} ~ utxo$.
-
-\begin{equation*}
-\begin{split}
+Our starting point is
+%
+\begin{align*}
 \mathsf{applyBlock}_\sigma & ~ b ~ (utxo, pending, \sigma) = (utxo^\prime, pending^\prime, \sigma^\prime) \\
 \text{where} \quad \\
     utxo^\prime & = \mathsf{updateUTxO} ~ b ~ utxo \\
     pending^\prime & = \mathsf{updatePending} ~ b ~ pending \\
     \sigma^\prime & = \mathsf{balance} ~ utxo^\prime
-\end{split}
-\end{equation*}
-
+\end{align*}
+%
 If we focus on the interesting bits and expand this out a couple steps we get
-
-\begin{equation*}
-\begin{split}
-    utxo^\prime & = \mathsf{txins} ~ b \subtractdom (utxo \cup (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}})) \\
-    \sigma^\prime & = \mathsf{balance} ~ utxo^\prime
-\end{split}
-\end{equation*}
-
-For convenience we define
-
-\begin{equation*}
-\begin{split}
-    utxo^+ & = \mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}} \\
-\end{split}
-\end{equation*}
-
-And use it, giving us
-
-\begin{equation*}
-\begin{split}
-    utxo^+ & = \mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}} \\
-    utxo^\prime & = \mathsf{txins} ~ b \subtractdom (utxo \cup utxo^+)  \\
-    \sigma^\prime & = \mathsf{balance} ~ (\mathsf{txins} ~ b \subtractdom (utxo \cup utxo^+))
-\end{split}
-\end{equation*}
-
-Applying Lemma~\ref{lem:balance_props}.\ref{eq:balance_props_minus} to distribute $\mathsf{balance}$ over $\subtractdom$ gives us
-
-\begin{equation*}
-\begin{split}
-    \sigma^\prime & = \mathsf{balance} ~ (utxo \cup utxo^+) - \mathsf{balance} ~ (\mathsf{txins} ~ b \restrictdom (utxo \cup utxo^+)) \\
-\end{split}
-\end{equation*}
-
-Now it should be a property of the blockchain we can rely on that
-
-\begin{equation*}
-\dom utxo \cap \dom (\mathsf{txouts} ~ b) = \emptyset
-\end{equation*}
-
-So we can apply Lemma~\ref{lem:balance_props}.\ref{eq:balance_props_union} to distribute $\mathsf{balance}$ over $\cup$) to give us
-\begin{equation*}
-\begin{split}
-    \sigma^\prime & = \mathsf{balance} ~ utxo + \mathsf{balance} ~ utxo^+ - \mathsf{balance} ~ (\mathsf{txins} ~ b \restrictdom (utxo \cup utxo^+)) \\
-             & = \sigma + \mathsf{balance} ~ utxo^+ - \mathsf{balance} ~ (\mathsf{txins} ~ b \restrictdom (utxo \cup utxo^+))
-\end{split}
-\end{equation*}
-
-In this final step we are able to reuse the previous balance $\sigma$ to
-compute the new $\sigma^\prime$ without having to compute
-$\mathsf{balance} ~ utxo$ directly.
+%
+\begin{align*}
+utxo^\prime   & = \mathsf{txins} ~ b \subtractdom (utxo \cup (\mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}})) \\
+\sigma^\prime & = \mathsf{balance} ~ utxo^\prime
+%
+\intertext{For convenience we define}
+%
+utxo^+ & = \mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}} \\
+%
+\intertext{And use it, giving us}
+%
+utxo^+        & = \mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}} \\
+utxo^\prime   & = \mathsf{txins} ~ b \subtractdom (utxo \cup utxo^+) \\
+\sigma^\prime & = \mathsf{balance} ~ (\mathsf{txins} ~ b \subtractdom (utxo \cup utxo^+))
+%
+\intertext{Applying Lemma~\ref{lem:balance_props}.\ref{eq:balance_props_minus}
+to distribute $\mathsf{balance}$ over $\subtractdom$ gives us}
+%
+\sigma^\prime & = \mathsf{balance} ~ (utxo \cup utxo^+) - \mathsf{balance} ~ (\mathsf{txins} ~ b \restrictdom (utxo \cup utxo^+)) \\
+%
+\intertext{Relying on the precondition to $\mathsf{applyBlock}$, we can apply
+Lemma~\ref{lem:balance_props}.\ref{eq:balance_props_union} to distribute
+$\mathsf{balance}$ over $\cup$ to give us}
+%
+\sigma^\prime & = \mathsf{balance} ~ utxo + \mathsf{balance} ~ utxo^+ - \mathsf{balance} ~ (\mathsf{txins} ~ b \restrictdom (utxo \cup utxo^+)) \\
+              & = \sigma + \mathsf{balance} ~ utxo^+ - \mathsf{balance} ~ (\mathsf{txins} ~ b \restrictdom (utxo \cup utxo^+))
+\end{align*}
 
 The extra things we do have to compute turn out not to be expensive
 \begin{equation*}
@@ -878,19 +840,48 @@ The extra things we do have to compute turn out not to be expensive
 \end{split}
 \end{equation*}
 
-Putting everything back together, and defining $utxo^-$ for symmetry, we get
+Putting everything back together, and defining $utxo^-$ for symmetry, gives
+us an extension of the basic model with a cached UTxO balance, shown
+in Figure~\ref{fig:model_with_cached_balance}.
 
+\begin{figure}
+%
+\emph{Wallet state}
+%
+\begin{align*}
+& (\mathit{utxo}, \mathit{pending}, \sigma) \in \mathsf{Wallet} = \mathsf{UTxO} \times \mathsf{Pending} \times \mathsf{Coin} \\
+& w_\emptyset \in \mathsf{Wallet} = (\emptyset, \emptyset, 0)
+\end{align*}
+%
+\emph{State invariant}
+%
 \begin{equation*}
-\begin{split}
+\sigma = \mathsf{balance} ~ \mathit{utxo}
+\end{equation*}
+%
+\emph{Queries}
+%
+\begin{align*}
+  \mathsf{availableBalance} ~ (\mathit{utxo}, \mathit{pending}, \sigma)
+& = \sigma - \mathsf{balance} ~ (\mathsf{txins} ~ pending \restrictdom utxo) \\
+  \mathsf{totalBalance} ~ (\mathit{utxo}, \mathit{pending}, \sigma)
+& = \mathsf{availableBalance} ~ (\mathit{utxo}, \mathit{pending}, \sigma) + \mathsf{balance} ~ (\mathsf{change} ~ pending)
+\end{align*}
+%
+\emph{Updates}
+%
+\begin{align*}
 \mathsf{applyBlock}_\sigma & ~ b ~ (utxo, pending, \sigma) = (utxo^\prime, pending^\prime, \sigma^\prime) \\
 \text{where} \quad \\
     pending^\prime & = \mathsf{updatePending} ~ b ~ pending \\
     utxo^+ & = \mathsf{txouts} ~ b \restrictrange \mathsf{TxOut_{ours}} \\
     utxo^- & = \mathsf{txins} ~ b \restrictdom (utxo \cup utxo^+) \\
     utxo^\prime & = \mathsf{txins} ~ b \subtractdom (utxo \cup utxo^+) \\
-    \sigma^\prime & = \sigma + \mathsf{balance} ~ utxo^+ - \mathsf{balance} ~ utxo^- \\
-\end{split}
-\end{equation*}
+    \sigma^\prime & = \sigma + \mathsf{balance} ~ utxo^+ - \mathsf{balance} ~ utxo^-
+\end{align*}
+%
+\caption{\label{fig:model_with_cached_balance}Basic model with cached balance}
+\end{figure}
 
 \section{Database implementation considerations}
 \label{sec:prefiltering}
