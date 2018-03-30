@@ -10,21 +10,22 @@ import           Data.Coerce (coerce)
 import           Data.List (delete)
 import           Data.List.NonEmpty (fromList)
 
-import           Control.Lens ((+~), (<>~), (?~), each, filtered, at)
+import           Control.Lens (at, each, filtered, (+~), (<>~), (?~))
 import           Test.QuickCheck (Gen, arbitrary, elements, frequency, generate)
 
 import           Cardano.Wallet.API.Response (WalletResponse (..))
 import           Cardano.Wallet.API.V1.Types (Account (..), AccountIndex, AccountUpdate (..),
-                                              AddressValidity (..), AssuranceLevel (..),
-                                              EstimatedFees (..), NewAccount (..), NewAddress (..),
-                                              NewWallet (..), PasswordUpdate (..), Payment (..),
+                                              AssuranceLevel (..), EstimatedFees (..),
+                                              NewAccount (..), NewAddress (..), NewWallet (..),
+                                              PasswordUpdate (..), Payment (..),
                                               PaymentDistribution (..), PaymentSource (..),
                                               SpendingPassword, Transaction (..), V1 (..),
                                               Wallet (..), WalletAddress (..), WalletId,
                                               WalletOperation (..), WalletUpdate (..))
 
 import           Cardano.Wallet.API.V1.Migration.Types (migrate)
-import           Cardano.Wallet.Client (ClientError (..), WalletClient (..), getTransactionIndex, getAddressIndex, getAccounts, getWallets)
+import           Cardano.Wallet.Client (ClientError (..), WalletClient (..), getAccounts,
+                                        getAddressIndex, getTransactionIndex, getWallets)
 
 import           Pos.Core (mkCoin)
 import           Pos.Util (maybeThrow)
@@ -335,7 +336,7 @@ runAction wc ws PostAddress = do
 runAction wc ws GetAddresses   = do
     -- We choose one address, we could choose all of them.
     -- Also, remove the `V1` type since we don't need it now.
-    address <-  coerce . addrId <$> pickRandomElement (ws ^. addresses)
+    address <-  coerce <$> pickRandomElement (ws ^. addresses)
     -- We get all the accounts.
     result  <-  respToRes $ getAddressIndex wc
 
@@ -357,15 +358,8 @@ runAction wc ws GetAddress     = do
 
     textAddress <- coerce <$> cAddress
 
-    -- We check if the address is valid. It should be.
-    result  <-  respToRes $ getAddressValidity wc textAddress
-
-    let isAddressValid = isValid result
-
-    -- The address should be valid, it should exist.
-    checkInvariant
-        isAddressValid
-        (LocalAddressDiffer . coerce $ address)
+    -- If the address exists, it is valid.
+    _  <-  respToRes $ getAddress wc textAddress
 
     -- Modify wallet state accordingly.
     pure $ ws
@@ -469,7 +463,7 @@ runAction wc ws GetTransaction  = do
 
     result  <-  respToRes $ getTransactionIndex
                                 wc
-                                walletId
+                                (Just walletId)
                                 (Just accountIndex)
                                 Nothing
                                 Nothing

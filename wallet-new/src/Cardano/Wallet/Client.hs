@@ -26,6 +26,7 @@ module Cardano.Wallet.Client
     , SortOperations(..)
     , FilterOperation(..)
     , SortOperation(..)
+    , WalletResponse(..)
     ) where
 
 import           Universum
@@ -63,11 +64,11 @@ data WalletClient m
     = WalletClient
     { -- address endpoints
       getAddressIndexPaginated
-         :: Maybe Page -> Maybe PerPage -> Resp m [Address]
+         :: Maybe Page -> Maybe PerPage -> Resp m [WalletAddress]
     , postAddress
          :: NewAddress -> Resp m WalletAddress
-    , getAddressValidity
-         :: Text -> Resp m AddressValidity
+    , getAddress
+         :: Text -> Resp m WalletAddress
     -- wallets endpoints
     , postWallet
          :: New Wallet -> Resp m Wallet
@@ -100,7 +101,7 @@ data WalletClient m
     , postTransaction
          :: Payment -> Resp m Transaction
     , getTransactionIndexFilterSorts
-         :: WalletId
+         :: Maybe WalletId
          -> Maybe AccountIndex
          -> Maybe (V1 Core.Address)
          -> Maybe Page
@@ -118,7 +119,7 @@ data WalletClient m
          :: Resp m NodeInfo
     } deriving Generic
 
-getAddressIndex :: WalletClient m -> Resp m [Address]
+getAddressIndex :: WalletClient m -> Resp m [WalletAddress]
 getAddressIndex wc = getAddressIndexPaginated wc Nothing Nothing
 
 getAccounts :: WalletClient m -> WalletId -> Resp m [Account]
@@ -126,7 +127,7 @@ getAccounts wc wi = getAccountIndexPaged wc wi Nothing Nothing
 
 getTransactionIndex
     :: WalletClient m
-    -> WalletId
+    -> Maybe WalletId
     -> Maybe AccountIndex
     -> Maybe (V1 Core.Address)
     -> Maybe Page
@@ -150,8 +151,8 @@ hoistClient phi wc = WalletClient
          \x -> phi . getAddressIndexPaginated wc x
     , postAddress =
          phi . postAddress wc
-    , getAddressValidity =
-         phi . getAddressValidity wc
+    , getAddress =
+         phi . getAddress wc
     , postWallet =
          phi . postWallet wc
     , getWalletIndexFilterSorts =

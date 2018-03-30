@@ -7424,7 +7424,7 @@ inherit (pkgs) mesa;};
            license = stdenv.lib.licenses.mit;
          }) {};
       "cardano-sl-node" = callPackage
-         ({ mkDerivation, base, cardano-sl, cardano-sl-infra
+        ({ mkDerivation, base, cardano-sl, cardano-sl-infra
          , cardano-sl-networking, cardano-sl-ssc, cardano-sl-update
          , cardano-sl-util, cpphs, log-warper, stdenv, universum
          }:
@@ -7678,7 +7678,7 @@ inherit (pkgs) mesa;};
          , cardano-sl-crypto, cardano-sl-db, cardano-sl-delegation
          , cardano-sl-infra, cardano-sl-networking, cardano-sl-ssc
          , cardano-sl-txp, cardano-sl-update, cardano-sl-util
-         , cardano-sl-wallet, constraints, containers, data-default
+         , cardano-sl-wallet, conduit, constraints, containers, data-default
          , exceptions, formatting, generics-sop, hspec, http-api-data
          , http-client, http-types, insert-ordered-containers, ixset-typed
          , json-sop, lens, log-warper, memory, mmorph, mtl
@@ -7713,26 +7713,26 @@ inherit (pkgs) mesa;};
              aeson aeson-pretty base bytestring cardano-sl cardano-sl-client
              cardano-sl-core cardano-sl-crypto cardano-sl-infra
              cardano-sl-networking cardano-sl-ssc cardano-sl-txp
-             cardano-sl-update cardano-sl-util cardano-sl-wallet containers
-             data-default exceptions formatting http-api-data http-types
-             insert-ordered-containers ixset-typed lens log-warper memory mtl
-             neat-interpolation optparse-applicative QuickCheck safe-exceptions
-             serokell-util servant servant-server servant-swagger
-             servant-swagger-ui stm string-conv swagger2 text text-format
-             time-units universum unordered-containers wai wai-cors wai-extra
-             warp
+             cardano-sl-update cardano-sl-util cardano-sl-wallet conduit
+             containers data-default exceptions formatting hspec http-api-data
+             http-types insert-ordered-containers ixset-typed lens log-warper
+             memory mtl neat-interpolation optparse-applicative QuickCheck
+             safe-exceptions serokell-util servant servant-server
+             servant-swagger servant-swagger-ui stm string-conv swagger2 text
+             text-format time-units universum unordered-containers wai wai-cors
+             wai-extra warp
            ];
            testHaskellDepends = [
              aeson aeson-pretty base bytestring cardano-sl cardano-sl-block
              cardano-sl-client cardano-sl-core cardano-sl-crypto cardano-sl-db
              cardano-sl-delegation cardano-sl-infra cardano-sl-networking
              cardano-sl-ssc cardano-sl-txp cardano-sl-update cardano-sl-util
-             cardano-sl-wallet constraints containers data-default exceptions
-             formatting hspec http-client http-types ixset-typed lens log-warper
-             mmorph mtl neat-interpolation optparse-applicative QuickCheck
-             quickcheck-instances safe-exceptions serokell-util servant
-             servant-quickcheck servant-server servant-swagger stm string-conv
-             swagger2 text text-format time time-units universum
+             cardano-sl-wallet conduit constraints containers data-default
+             exceptions formatting hspec http-client http-types ixset-typed lens
+             log-warper mmorph mtl neat-interpolation optparse-applicative
+             QuickCheck quickcheck-instances safe-exceptions serokell-util
+             servant servant-quickcheck servant-server servant-swagger stm
+             string-conv swagger2 text text-format time time-units universum
              unordered-containers
            ];
            doHaddock = false;
@@ -7906,20 +7906,20 @@ inherit (pkgs) mesa;};
            license = stdenv.lib.licenses.bsd3;
          }) {};
       "cborg" = callPackage
-        ({ mkDerivation, array, base, bytestring, containers, fetchgit
-         , ghc-prim, half, integer-gmp, primitive, stdenv, text
+        ({ mkDerivation, array, base, bytestring, containers, deepseq
+         , fetchgit, ghc-prim, half, integer-gmp, primitive, stdenv, text
          }:
          mkDerivation {
            pname = "cborg";
            version = "0.2.0.0";
            src = fetchgit {
              url = "https://github.com/well-typed/cborg";
-             sha256 = "0i38fzyj34cg5i6n0kk05zv255hbz2544rxknsxlvdz90cr2rk51";
-             rev = "8bddf97abe613d4eb523ed6b0ff8eabbd713c744";
+             sha256 = "1w06annk6nm01brd60hzl15143cvjvsaam9lhwzpmppyvgb0cdyz";
+             rev = "3d274c14ca3077c3a081ba7ad57c5182da65c8c1";
            };
            postUnpack = "sourceRoot+=/cborg; echo source root reset to $sourceRoot";
            libraryHaskellDepends = [
-             array base bytestring containers ghc-prim half integer-gmp
+             array base bytestring containers deepseq ghc-prim half integer-gmp
              primitive text
            ];
            doHaddock = false;
